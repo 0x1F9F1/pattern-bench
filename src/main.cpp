@@ -41,6 +41,25 @@ static constexpr const uint32_t RNG_SEED = 0;
 
 using mem::byte;
 
+std::mt19937 create_twister(uint32_t& seed)
+{
+    if (seed == 0)
+    {
+        seed = std::random_device{}();
+    }
+
+    std::minstd_rand0 source(seed);
+
+    // Magic number 624: The number of unsigned ints the MT uses as state
+    std::vector<unsigned int> random_data(624);
+    std::generate(begin(random_data), end(random_data), [&] { return source(); });
+
+    std::seed_seq seeds(begin(random_data), end(random_data));
+    std::mt19937 result(seeds);
+
+    return result;
+}
+
 struct scan_bench
 {
 private:
@@ -48,8 +67,8 @@ private:
     byte* data_ {nullptr};
     size_t size_ {0};
 
-    uint32_t seed_ {RNG_SEED ? RNG_SEED : std::random_device{}()};
-    std::mt19937 rng_ {seed_};
+    uint32_t seed_ {RNG_SEED};
+    std::mt19937 rng_ {create_twister(seed_)};
 
     std::string pattern_;
     std::string masks_;
