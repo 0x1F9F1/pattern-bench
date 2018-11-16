@@ -7,50 +7,13 @@
 
 #include <algorithm>
 
-static std::vector<const byte*> EnsureMatches(const byte* data, size_t length, const byte* pattern, const char* mask)
-{
-    std::vector<const byte*> results;
-
-    size_t maskSize = strlen(mask);
-
-    const char* findWild = strrchr(mask, '?');
-
-    ptrdiff_t Last[256];
-
-    std::fill(std::begin(Last), std::end(Last), findWild ? (findWild - mask) : - 1);
-
-    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(maskSize); ++i)
-    {
-        if (Last[pattern[i]] < i)
-        {
-            Last[pattern[i]] = i;
-        }
-    }
-
-    for (const byte* i = data, *end = data + length - maskSize; i <= end;)
-    {
-        const byte* ptr = i;
-        ptrdiff_t j = maskSize - 1;
-
-        while ((j >= 0) && (mask[j] == '?' || pattern[j] == ptr[j])) j--;
-
-        if (j < 0)
-        {
-            results.emplace_back(ptr);
-
-            i++;
-        }
-        else i += std::max((ptrdiff_t)1, j - Last[ptr[j]]);
-    }
-
-    return results;
-}
-
 struct cfx_pattern_scanner
     : pattern_scanner
 {
     const byte* CurrentPattern = nullptr;
     const char* CurrentMask = nullptr;
+    size_t MaskSize = 0;
+    ptrdiff_t Last[256];
 
     virtual const char* GetName() const
     {
@@ -61,11 +24,50 @@ struct cfx_pattern_scanner
     {
         CurrentPattern = pattern;
         CurrentMask = mask;
+
+        MaskSize = strlen(mask);
+
+        const char* findWild = strrchr(mask, '?');
+
+        std::fill(std::begin(Last), std::end(Last), findWild ? (findWild - mask) : - 1);
+
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(MaskSize); ++i)
+        {
+            if (Last[pattern[i]] < i)
+            {
+                Last[pattern[i]] = i;
+            }
+        }
     }
 
     virtual std::vector<const byte*> Scan(const byte* data, size_t length) const
     {
-        return EnsureMatches(data, length, CurrentPattern, CurrentMask);
+        const byte* const pattern = CurrentPattern;
+        const char* const mask = CurrentMask;
+        const ptrdiff_t* const last = Last;
+        const size_t mask_size = MaskSize;
+
+        std::vector<const byte*> results;
+
+        for (const byte* i = data, *end = data + length - mask_size; i <= end;)
+        {
+            ptrdiff_t j = mask_size - 1;
+
+            while ((j >= 0) && (mask[j] == '?' || pattern[j] == i[j])) j--;
+
+            if (j < 0)
+            {
+                results.emplace_back(i);
+
+                i++;
+            }
+            else
+            {
+                i += std::max((ptrdiff_t)1, j - last[i[j]]);
+            }
+        }
+
+        return results;
     }
 };
 
