@@ -24,6 +24,7 @@
 
 #include <mem/mem.h>
 #include <mem/pattern.h>
+#include <mem/utils.h>
 
 #include <mem/platform.h>
 #include <mem/platform-inl.h>
@@ -36,9 +37,9 @@
 #include "pattern_entry.h"
 
 static constexpr const size_t PAGE_COUNT = 1024;
-static constexpr const size_t TEST_COUNT = 100;
+static constexpr const size_t TEST_COUNT = 256;
 static constexpr const uint32_t RNG_SEED = 0;
-static constexpr bool SHOW_ERRORS = false;
+static constexpr const size_t LOG_LEVEL = 0;
 
 using mem::byte;
 
@@ -181,7 +182,7 @@ public:
 
         if (shifted.size() != expected_.size())
         {
-            if (SHOW_ERRORS)
+            if (LOG_LEVEL > 1)
                 fmt::print("{0} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
 
             return false;
@@ -191,7 +192,7 @@ public:
         {
             if (expected_.find(result) == expected_.end())
             {
-                if (SHOW_ERRORS)
+                if (LOG_LEVEL > 1)
                     fmt::print("{0} - Wasn't expecting 0x{1:X}\n", scanner.GetName(), result);
 
                 return false;
@@ -228,16 +229,16 @@ int main()
 
                 if (!reg.check_results(*pattern, results))
                 {
-                    if (SHOW_ERRORS)
-                        fmt::print("{0} - failed test #{1}\n", pattern->GetName(), i);
+                    if (LOG_LEVEL > 0)
+                        fmt::print("{0} - Failed test {1} ({2}, {3})\n", pattern->GetName(), i, mem::as_hex({ reg.pattern(), strlen(reg.masks()) }), reg.masks());
 
                     pattern->Failed++;
                 }
             }
             catch (...)
             {
-                if (SHOW_ERRORS)
-                    fmt::print("{0} - failed test #{1} (exception)\n", pattern->GetName(), i);
+                if (LOG_LEVEL > 0)
+                    fmt::print("{0} - Failed test {1} (exception)\n", pattern->GetName(), i);
 
                 pattern->Failed++;
             }
@@ -260,6 +261,6 @@ int main()
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.Elapsed).count();
 
-        fmt::print("{0} | {1:<32} | {2:<3} ms | {3} failed\n", i, pattern.GetName(), elapsed, pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:>4} ms | {3} failed\n", i, pattern.GetName(), elapsed, pattern.Failed);
     }
 }
