@@ -36,8 +36,8 @@
 
 #include "pattern_entry.h"
 
-static constexpr const size_t PAGE_COUNT = 1024;
-static constexpr const size_t TEST_COUNT = 512;
+static constexpr const size_t PAGE_COUNT = 64;
+static constexpr const size_t TEST_COUNT = 1024 * 16;
 static constexpr const uint32_t RNG_SEED = 0;
 static constexpr const size_t LOG_LEVEL = 0;
 
