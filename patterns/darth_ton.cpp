@@ -8,13 +8,13 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 // Boyer-Moore-Horspool with wildcards implementation
-void FillShiftTable( const uint8_t* pPattern, size_t patternSize, uint8_t wildcard, size_t* bad_char_skip )
+void FillShiftTable( const uint8_t* pPattern, size_t patternSize, const char* pMask, size_t* bad_char_skip )
 {
     size_t idx = 0;
     size_t last = patternSize - 1;
 
     // Get last wildcard position
-    for (idx = last; idx > 0 && pPattern[idx] != wildcard; --idx);
+    for (idx = last; idx > 0 && pMask[idx] != '?'; --idx);
     size_t diff = last - idx;
     if (diff == 0)
         diff = 1;
@@ -26,13 +26,15 @@ void FillShiftTable( const uint8_t* pPattern, size_t patternSize, uint8_t wildca
         bad_char_skip[pPattern[idx]] = last - idx;
 }
 
-std::vector<const byte*> Search( const uint8_t* pScanPos, size_t scanSize, const uint8_t* pPattern, size_t patternSize, uint8_t wildcard )
+std::vector<const byte*> Search( const uint8_t* pScanPos, size_t scanSize, const uint8_t* pPattern, const char* pMask)
 {
+    size_t patternSize = strlen(pMask);
+
     size_t bad_char_skip[UCHAR_MAX + 1];
     const uint8_t* scanEnd = pScanPos + scanSize - patternSize;
     intptr_t last = static_cast<intptr_t>(patternSize) - 1;
 
-    FillShiftTable( pPattern, patternSize, wildcard, bad_char_skip );
+    FillShiftTable( pPattern, patternSize, pMask, bad_char_skip );
 
     std::vector<const byte*> results;
 
@@ -40,7 +42,7 @@ std::vector<const byte*> Search( const uint8_t* pScanPos, size_t scanSize, const
     for (; pScanPos <= scanEnd; pScanPos += bad_char_skip[pScanPos[last]])
     {
         for (intptr_t idx = last; idx >= 0 ; --idx)
-            if (pPattern[idx] != wildcard && pScanPos[idx] != pPattern[idx])
+            if (pMask[idx] != '?' && pScanPos[idx] != pPattern[idx])
                 goto skip;
             else if (idx == 0)
                 results.push_back(pScanPos);
@@ -116,7 +118,7 @@ struct darth_ton_pattern_scanner
 {
     virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
-        return Search( data, length, pattern, strlen(mask), 0);
+        return Search( data, length, pattern, mask);
     }
 
     virtual const char* GetName() const override
