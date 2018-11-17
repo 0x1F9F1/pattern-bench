@@ -47,3 +47,34 @@ struct mem_pattern_scanner
 };
 
 REGISTER_PATTERN(mem_pattern_scanner);
+
+#include <mem/simd-pattern.h>
+
+struct mem_simd_pattern_scanner
+    : pattern_scanner
+{
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    {
+        mem::pattern_settings settings {0, 0, '?'};
+        mem::pattern current_pattern((const char*) pattern, mask, settings);
+        mem::simd_pattern current_pattern_simd(current_pattern);
+
+        std::vector<const byte*> results;
+
+        current_pattern_simd.scan_predicate({ data, length }, [&] (mem::pointer result)
+        {
+            results.push_back(result.as<const byte*>());
+
+            return false;
+        });
+
+        return results;
+    }
+
+    virtual const char* GetName() const override
+    {
+        return "mem::simd_pattern";
+    }
+};
+
+REGISTER_PATTERN(mem_simd_pattern_scanner);
