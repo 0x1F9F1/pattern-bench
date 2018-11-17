@@ -45,7 +45,8 @@ struct pattern_scanner
 
 extern std::vector<std::unique_ptr<pattern_scanner>> PATTERNS;
 
-#define REGISTER_PATTERN_(CLASS, LINE) static mem::init_function DO_REGISTER_PATTERN_##LINE {[ ] { PATTERNS.emplace_back(std::make_unique<CLASS>()); }}
+#define REGISTER_PATTERN__(CLASS, LINE) static mem::init_function DO_REGISTER_PATTERN_##LINE {[ ] { PATTERNS.emplace_back(std::make_unique<CLASS>()); }}
+#define REGISTER_PATTERN_(CLASS, LINE) REGISTER_PATTERN__(CLASS, LINE)
 #define REGISTER_PATTERN(CLASS) REGISTER_PATTERN_(CLASS, __LINE__)
 
 std::vector<const byte*> FindPatternSimple(const byte* data, size_t length, const byte* pattern, const char* masks);
