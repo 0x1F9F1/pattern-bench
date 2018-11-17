@@ -155,17 +155,25 @@ public:
         pattern_.resize(pattern_length);
         masks_.resize(pattern_length);
 
-        std::generate_n(&pattern_[0], pattern_.size(), [&] { return (char) byte_dist(rng_); });
+        bool all_masks = true;
 
         std::bernoulli_distribution mask_dist(0.1);
 
-        std::generate_n(&masks_[0], masks_.size(), [&] { return mask_dist(rng_) ? '?' : 'x'; });
-
-        for (size_t i = 0; i < pattern_.size(); ++i)
+        do
         {
-            if (masks_[i] == '?')
-                pattern_[i] = 0;
-        }
+            std::generate_n(&pattern_[0], pattern_.size(), [&] { return (char) byte_dist(rng_); });
+            std::generate_n(&masks_[0], masks_.size(), [&] { return mask_dist(rng_) ? '?' : 'x'; });
+
+            all_masks = true;
+
+            for (size_t i = 0; i < pattern_.size(); ++i)
+            {
+                if (masks_[i] == '?')
+                    pattern_[i] = 0;
+                else
+                    all_masks = false;
+            }
+        } while (all_masks);
 
         std::uniform_int_distribution<size_t> count_dist(2, 10);
 
@@ -194,7 +202,7 @@ public:
         if (shifted.size() != expected_.size())
         {
             if (LOG_LEVEL > 2)
-                fmt::print("{0} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
+                fmt::print("{0:<32} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
 
             return false;
         }
@@ -204,7 +212,7 @@ public:
             if (expected_.find(result) == expected_.end())
             {
                 if (LOG_LEVEL > 2)
-                    fmt::print("{0} - Wasn't expecting 0x{1:X}\n", scanner.GetName(), result);
+                    fmt::print("{0:<32} - Wasn't expecting 0x{1:X}\n", scanner.GetName(), result);
 
                 return false;
             }
@@ -237,7 +245,7 @@ int main()
                 if (!reg.check_results(*pattern, results))
                 {
                     if (LOG_LEVEL > 1)
-                        fmt::print("{0} - Failed test {1} ({2}, {3})\n", pattern->GetName(), i, mem::as_hex({ reg.pattern(), strlen(reg.masks()) }), reg.masks());
+                        fmt::print("{0:<32} - Failed test {1} ({2}, {3})\n", pattern->GetName(), i, mem::as_hex({ reg.pattern(), strlen(reg.masks()) }), reg.masks());
 
                     pattern->Failed++;
                 }
@@ -245,7 +253,7 @@ int main()
             catch (...)
             {
                 if (LOG_LEVEL > 0)
-                    fmt::print("{0} - Failed test {1} (Exception)\n", pattern->GetName(), i);
+                    fmt::print("{0:<32} - Failed test {1} (Exception)\n", pattern->GetName(), i);
 
                 pattern->Failed++;
             }
