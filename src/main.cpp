@@ -66,6 +66,10 @@ struct scan_bench
 {
 private:
     byte* raw_region_ {nullptr};
+
+    byte* raw_data_ {nullptr};
+    size_t raw_size_ {0};
+
     byte* data_ {nullptr};
     size_t size_ {0};
 
@@ -81,12 +85,12 @@ public:
     {
         size_t page_size = mem::page_size();
 
-        size_ = page_size * PAGE_COUNT;
-        raw_region_ = static_cast<byte*>(mem::protect_alloc(size_ + (page_size * 2), mem::prot_flags::RW));
-        data_ = raw_region_ + page_size;
+        raw_size_ = page_size * PAGE_COUNT;
+        raw_region_ = static_cast<byte*>(mem::protect_alloc(raw_size_ + (page_size * 2), mem::prot_flags::RW));
+        raw_data_ = raw_region_ + page_size;
 
         mem::protect_modify(raw_region_, page_size, mem::prot_flags::NONE);
-        mem::protect_modify(raw_region_ + page_size + size_, page_size, mem::prot_flags::NONE);
+        mem::protect_modify(raw_region_ + page_size + raw_size_, page_size, mem::prot_flags::NONE);
     }
 
     ~scan_bench()
@@ -133,6 +137,13 @@ public:
 
     void generate()
     {
+        std::uniform_int_distribution<size_t> size_dist(0, 100);
+
+        size_t variation = size_dist(rng_);
+
+        data_ = raw_data_ + variation;
+        size_ = raw_size_ - variation;
+
         std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
 
         std::generate_n(data(), size(), [&] { return (byte) byte_dist(rng_); });
