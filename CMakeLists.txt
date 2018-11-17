@@ -12,6 +12,7 @@ add_executable(${PROJECT_NAME}
     patterns/cfx.cpp
     patterns/forza.cpp
     patterns/mrexodia.cpp
+    patterns/darth_ton.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)

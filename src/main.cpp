@@ -53,7 +53,7 @@ std::mt19937 create_twister(uint32_t& seed)
 
     // Magic number 624: The number of unsigned ints the MT uses as state
     std::vector<unsigned int> random_data(624);
-    std::generate(begin(random_data), end(random_data), [&] { return source(); });
+    std::generate(begin(random_data), end(random_data), source);
 
     std::seed_seq seeds(begin(random_data), end(random_data));
     std::mt19937 result(seeds);
