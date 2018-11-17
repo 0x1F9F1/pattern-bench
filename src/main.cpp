@@ -38,6 +38,7 @@
 static constexpr const size_t PAGE_COUNT = 1024;
 static constexpr const size_t TEST_COUNT = 100;
 static constexpr const uint32_t RNG_SEED = 0;
+static constexpr bool SHOW_ERRORS = false;
 
 using mem::byte;
 
@@ -174,13 +175,14 @@ public:
         expected_ = shift_results(FindPatternSimple(data(), size(), pattern(), masks()));
     }
 
-    bool check_results(const std::vector<const byte*>& results)
+    bool check_results(const pattern_scanner& scanner, const std::vector<const byte*>& results)
     {
         std::unordered_set<size_t> shifted = shift_results(results);
 
         if (shifted.size() != expected_.size())
         {
-            fmt::print("Size Mismatch - Got {0}, Expected {1}\n", shifted.size(), expected_.size());
+            if (SHOW_ERRORS)
+                fmt::print("{0} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
 
             return false;
         }
@@ -189,7 +191,8 @@ public:
         {
             if (expected_.find(result) == expected_.end())
             {
-                fmt::print("Value Mismatch - Wasn't expecting 0x{0:X}\n", result);
+                if (SHOW_ERRORS)
+                    fmt::print("{0} - Wasn't expecting 0x{1:X}\n", scanner.GetName(), result);
 
                 return false;
             }
@@ -228,16 +231,18 @@ int main()
                 pattern->ElapsedScan += end - start_scan;
                 pattern->ElapsedTotal += end - start_total;
 
-                if (!reg.check_results(results))
+                if (!reg.check_results(*pattern, results))
                 {
-                    fmt::print("{0} failed test {1}\n", pattern->GetName(), i);
+                    if (SHOW_ERRORS)
+                        fmt::print("{0} - failed test #{1}\n", pattern->GetName(), i);
 
                     pattern->Failed++;
                 }
             }
             catch (...)
             {
-                fmt::print("{0} failed test {1} (exception)\n", pattern->GetName(), i);
+                if (SHOW_ERRORS)
+                    fmt::print("{0} - failed test #{1} (exception)\n", pattern->GetName(), i);
 
                 pattern->Failed++;
             }
@@ -252,6 +257,8 @@ int main()
         return lhs->ElapsedTotal < rhs->ElapsedTotal;
     });
 
+    fmt::print("End Scan\n\n");
+
     for (size_t i = 0; i < PATTERNS.size(); ++i)
     {
         const auto& pattern = *PATTERNS[i];
@@ -259,6 +266,6 @@ int main()
         long long elapsed_scan  = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.ElapsedScan).count();
         long long elapsed_total = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.ElapsedTotal).count();
 
-        fmt::print("{0} | {1:<20} | {2:<3} ms ({3:<3} ms total) | {4} failed\n", i, pattern.GetName(), elapsed_scan, elapsed_total, pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:<3} ms ({3:<3} ms total) | {4} failed\n", i, pattern.GetName(), elapsed_scan, elapsed_total, pattern.Failed);
     }
 }

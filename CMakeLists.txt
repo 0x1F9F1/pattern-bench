@@ -10,6 +10,8 @@ add_executable(${PROJECT_NAME}
     patterns/baseline.cpp
     patterns/brick.cpp
     patterns/cfx.cpp
+    patterns/forza.cpp
+    patterns/mrexodia.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
