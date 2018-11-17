@@ -26,7 +26,7 @@ target_link_libraries(${PROJECT_NAME}
     mem fmt)
 
 if(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa /arch:AVX2")
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
