@@ -23,13 +23,18 @@ std::vector<std::unique_ptr<pattern_scanner>> PATTERNS;
 
 std::vector<const byte*> FindPatternSimple(const byte* data, size_t length, const byte* pattern, const char* masks)
 {
-    std::vector<const byte*> results;
-
     size_t pattern_length = strlen(masks);
+
+    if (pattern_length > length)
+    {
+        return {};
+    }
+
+    std::vector<const byte*> results;
 
     length -= pattern_length;
 
-    for (size_t i = 0; i < length; ++i)
+    for (size_t i = 0; i <= length; ++i)
     {
         bool found = true;
 
