@@ -62,7 +62,7 @@ __forceinline bool Matches(const uint8_t* Data, PatternData* Patterns)
     {
         auto l = Patterns->Length[i];
 
-        if (_mm_cmpestri(Patterns->Value[i], l, _mm_loadu_si128((const __m128i*)k), l, _SIDD_CMP_EQUAL_EACH | _SIDD_MASKED_NEGATIVE_POLARITY) != l)
+        if (_mm_cmpestri(Patterns->Value[i], l, _mm_loadu_si128((const __m128i*)k), l, _SIDD_CMP_EQUAL_EACH | _SIDD_MASKED_NEGATIVE_POLARITY) != l) // Exception on test 99 with SEED = 0x805A303D, PAGES = 1024
             break;
 
         if (i + 1 == Patterns->Count)

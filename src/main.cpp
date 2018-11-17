@@ -37,7 +37,7 @@
 #include "pattern_entry.h"
 
 static constexpr const size_t PAGE_COUNT = 1024;
-static constexpr const size_t TEST_COUNT = 256;
+static constexpr const size_t TEST_COUNT = 512;
 static constexpr const uint32_t RNG_SEED = 0;
 static constexpr const size_t LOG_LEVEL = 0;
 
@@ -182,7 +182,7 @@ public:
 
         if (shifted.size() != expected_.size())
         {
-            if (LOG_LEVEL > 1)
+            if (LOG_LEVEL > 2)
                 fmt::print("{0} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
 
             return false;
@@ -192,7 +192,7 @@ public:
         {
             if (expected_.find(result) == expected_.end())
             {
-                if (LOG_LEVEL > 1)
+                if (LOG_LEVEL > 2)
                     fmt::print("{0} - Wasn't expecting 0x{1:X}\n", scanner.GetName(), result);
 
                 return false;
@@ -209,7 +209,7 @@ int main()
 
     scan_bench reg;
 
-    fmt::print("Begin Scan: Seed: 0x{0:08X}, Pages: {1}, Tests: {2}\n\n", reg.seed(), PAGE_COUNT, TEST_COUNT);
+    fmt::print("Begin Scan: Seed: 0x{0:08X}, Pages: {1}, Tests: {2}\n", reg.seed(), PAGE_COUNT, TEST_COUNT);
 
     for (size_t i = 0; i < TEST_COUNT; ++i)
     {
@@ -217,19 +217,15 @@ int main()
 
         for (auto& pattern : PATTERNS)
         {
+            stopwatch::time_point start_time = stopwatch::now();
+
             try
             {
-                stopwatch::time_point start_time = stopwatch::now();
-
                 std::vector<const byte*> results = pattern->Scan(reg.pattern(), reg.masks(), reg.data(), reg.size());
-
-                stopwatch::time_point end_time = stopwatch::now();
-
-                pattern->Elapsed += end_time - start_time;
 
                 if (!reg.check_results(*pattern, results))
                 {
-                    if (LOG_LEVEL > 0)
+                    if (LOG_LEVEL > 1)
                         fmt::print("{0} - Failed test {1} ({2}, {3})\n", pattern->GetName(), i, mem::as_hex({ reg.pattern(), strlen(reg.masks()) }), reg.masks());
 
                     pattern->Failed++;
@@ -238,10 +234,14 @@ int main()
             catch (...)
             {
                 if (LOG_LEVEL > 0)
-                    fmt::print("{0} - Failed test {1} (exception)\n", pattern->GetName(), i);
+                    fmt::print("{0} - Failed test {1} (Exception)\n", pattern->GetName(), i);
 
                 pattern->Failed++;
             }
+            
+            stopwatch::time_point end_time = stopwatch::now();
+
+            pattern->Elapsed += end_time - start_time;
         }
     }
 
@@ -261,6 +261,6 @@ int main()
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.Elapsed).count();
 
-        fmt::print("{0} | {1:<32} | {2:>4} ms | {3} failed\n", i, pattern.GetName(), elapsed, pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:>4} ms | {3:>3} failed\n", i, pattern.GetName(), elapsed, pattern.Failed);
     }
 }
