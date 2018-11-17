@@ -1,6 +1,6 @@
-#include "pattern_entry.h"
-
 // https://github.com/learn-more/findpattern-bench/blob/master/patterns/Forza.h
+
+#include "pattern_entry.h"
 
 #include <immintrin.h>
 
@@ -222,18 +222,9 @@ std::vector<const byte*> Find(const byte* Data, const uint32_t Length, const cha
 struct forza_pattern_scanner
     : pattern_scanner
 {
-    const byte* CurrentPattern = nullptr;
-    const char* CurrentMask = nullptr;
-
-    virtual void Init(const byte* pattern, const char* mask) override
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
-        CurrentPattern = pattern;
-        CurrentMask = mask;
-    }
-
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const override
-    {
-        return Find(data, length, (const char*) CurrentPattern, CurrentMask);
+        return Find(data, length, (const char*) pattern, mask);
     }
 
     virtual const char* GetName() const override
@@ -247,18 +238,9 @@ REGISTER_PATTERN(forza_pattern_scanner);
 struct forza_simd_pattern_scanner
     : pattern_scanner
 {
-    const byte* CurrentPattern = nullptr;
-    const char* CurrentMask = nullptr;
-
-    virtual void Init(const byte* pattern, const char* mask) override
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
-        CurrentPattern = pattern;
-        CurrentMask = mask;
-    }
-
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const override
-    {
-        return FindEx(data, length, (const char*) CurrentPattern, CurrentMask);
+        return FindEx(data, length, (const char*) pattern, mask);
     }
 
     virtual const char* GetName() const override

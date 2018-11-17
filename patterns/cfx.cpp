@@ -10,42 +10,22 @@
 struct cfx_pattern_scanner
     : pattern_scanner
 {
-    const byte* CurrentPattern = nullptr;
-    const char* CurrentMask = nullptr;
-    size_t MaskSize = 0;
-    ptrdiff_t Last[256];
-
-    virtual const char* GetName() const
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
-        return "CFX";
-    }
-
-    virtual void Init(const byte* pattern, const char* mask)
-    {
-        CurrentPattern = pattern;
-        CurrentMask = mask;
-
-        MaskSize = strlen(mask);
+        size_t mask_size = strlen(mask);
+        ptrdiff_t last[256];
 
         const char* findWild = strrchr(mask, '?');
 
-        std::fill(std::begin(Last), std::end(Last), findWild ? (findWild - mask) : - 1);
+        std::fill(std::begin(last), std::end(last), findWild ? (findWild - mask) : - 1);
 
-        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(MaskSize); ++i)
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(mask_size); ++i)
         {
-            if (Last[pattern[i]] < i)
+            if (last[pattern[i]] < i)
             {
-                Last[pattern[i]] = i;
+                last[pattern[i]] = i;
             }
         }
-    }
-
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const
-    {
-        const byte* const pattern = CurrentPattern;
-        const char* const mask = CurrentMask;
-        const ptrdiff_t* const last = Last;
-        const size_t mask_size = MaskSize;
 
         std::vector<const byte*> results;
 
@@ -68,6 +48,11 @@ struct cfx_pattern_scanner
         }
 
         return results;
+    }
+
+    virtual const char* GetName() const override
+    {
+        return "CFX";
     }
 };
 

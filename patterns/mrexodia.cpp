@@ -1,6 +1,6 @@
-#include "pattern_entry.h"
-
 // https://github.com/learn-more/findpattern-bench/blob/master/patterns/mrexodia_horspool.h
+
+#include "pattern_entry.h"
 
 //based on: https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore%E2%80%93Horspool_algorithm
 
@@ -76,23 +76,14 @@ const byte wildcard = '\0')
 struct mrexodia_pattern_scanner
     : pattern_scanner
 {
-    const byte* CurrentPattern = nullptr;
-    const char* CurrentMask = nullptr;
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    {
+        return boyermoore_horspool_memmem(data, length, pattern, strlen(mask), 0);
+    }
 
-    virtual const char* GetName() const
+    virtual const char* GetName() const override
     {
         return "mrexodia (horspool)";
-    }
-
-    virtual void Init(const byte* pattern, const char* mask)
-    {
-        CurrentPattern = pattern;
-        CurrentMask = mask;
-    }
-
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const
-    {
-        return boyermoore_horspool_memmem(data, length, CurrentPattern, strlen(CurrentMask), 0);
     }
 };
 

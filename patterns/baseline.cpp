@@ -22,23 +22,14 @@
 struct simple_pattern_scanner
     : pattern_scanner
 {
-    const byte* CurrentPattern = nullptr;
-    const char* CurrentMask = nullptr;
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    {
+        return FindPatternSimple(data, length, pattern, mask);
+    }
 
-    virtual const char* GetName() const
+    virtual const char* GetName() const override
     {
         return "Simple";
-    }
-
-    virtual void Init(const byte* pattern, const char* mask)
-    {
-        CurrentPattern = pattern;
-        CurrentMask = mask;
-    }
-
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const
-    {
-        return FindPatternSimple(data, length, CurrentPattern, CurrentMask);
     }
 };
 

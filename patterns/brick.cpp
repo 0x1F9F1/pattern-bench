@@ -24,23 +24,13 @@
 struct mem_pattern_scanner
     : pattern_scanner
 {
-    mem::pattern CurrentPattern;
-
-    virtual const char* GetName() const
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
-        return "mem::pattern";
-    }
+        mem::pattern current_pattern((const char*) pattern, mask);
 
-    virtual void Init(const byte* pattern, const char* mask)
-    {
-        CurrentPattern = mem::pattern((const char*) pattern, mask);
-    }
-
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const
-    {
         std::vector<const byte*> results;
 
-        CurrentPattern.scan_predicate({ data, length }, [&] (mem::pointer result)
+        current_pattern.scan_predicate({ data, length }, [&] (mem::pointer result)
         {
             results.push_back(result.as<const byte*>());
 
@@ -48,6 +38,11 @@ struct mem_pattern_scanner
         });
 
         return results;
+    }
+
+    virtual const char* GetName() const override
+    {
+        return "mem::pattern";
     }
 };
 

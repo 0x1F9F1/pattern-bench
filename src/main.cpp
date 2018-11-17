@@ -218,18 +218,13 @@ int main()
         {
             try
             {
-                stopwatch::time_point start_total = stopwatch::now();
+                stopwatch::time_point start_time = stopwatch::now();
 
-                pattern->Init(reg.pattern(), reg.masks());
+                std::vector<const byte*> results = pattern->Scan(reg.pattern(), reg.masks(), reg.data(), reg.size());
 
-                stopwatch::time_point start_scan = stopwatch::now();
+                stopwatch::time_point end_time = stopwatch::now();
 
-                std::vector<const byte*> results = pattern->Scan(reg.data(), reg.size());
-
-                stopwatch::time_point end = stopwatch::now();
-
-                pattern->ElapsedScan += end - start_scan;
-                pattern->ElapsedTotal += end - start_total;
+                pattern->Elapsed += end_time - start_time;
 
                 if (!reg.check_results(*pattern, results))
                 {
@@ -254,7 +249,7 @@ int main()
         if (lhs->Failed != rhs->Failed)
             return lhs->Failed < rhs->Failed;
 
-        return lhs->ElapsedTotal < rhs->ElapsedTotal;
+        return lhs->Elapsed < rhs->Elapsed;
     });
 
     fmt::print("End Scan\n\n");
@@ -263,9 +258,8 @@ int main()
     {
         const auto& pattern = *PATTERNS[i];
 
-        long long elapsed_scan  = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.ElapsedScan).count();
-        long long elapsed_total = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.ElapsedTotal).count();
+        long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.Elapsed).count();
 
-        fmt::print("{0} | {1:<32} | {2:<3} ms ({3:<3} ms total) | {4} failed\n", i, pattern.GetName(), elapsed_scan, elapsed_total, pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:<3} ms | {3} failed\n", i, pattern.GetName(), elapsed, pattern.Failed);
     }
 }

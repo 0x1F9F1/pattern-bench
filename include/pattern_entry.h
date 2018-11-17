@@ -33,14 +33,13 @@ using stopwatch = std::chrono::steady_clock;
 
 struct pattern_scanner
 {
-    stopwatch::duration ElapsedScan;
-    stopwatch::duration ElapsedTotal;
-
+    stopwatch::duration Elapsed {0};
     size_t Failed {0};
 
+    virtual ~pattern_scanner() = default;
+
+    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const = 0;
     virtual const char* GetName() const = 0;
-    virtual void Init(const byte* pattern, const char* mask) = 0;
-    virtual std::vector<const byte*> Scan(const byte* data, size_t length) const = 0;
 };
 
 extern std::vector<std::unique_ptr<pattern_scanner>> PATTERNS;
