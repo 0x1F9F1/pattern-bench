@@ -91,6 +91,10 @@ public:
 
         mem::protect_modify(raw_region_, page_size, mem::prot_flags::NONE);
         mem::protect_modify(raw_region_ + page_size + raw_size_, page_size, mem::prot_flags::NONE);
+
+        std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
+
+        std::generate_n(data(), size(), [&] { return (byte) byte_dist(rng_); });
     }
 
     ~scan_bench()
@@ -145,8 +149,6 @@ public:
         size_ = raw_size_ - variation;
 
         std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
-
-        std::generate_n(data(), size(), [&] { return (byte) byte_dist(rng_); });
 
         std::uniform_int_distribution<size_t> length_dist(5, 32);
 
