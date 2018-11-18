@@ -14,6 +14,10 @@ environment:
     BUILD_TYPE: Release
     APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
 
+before_build:
+  - cmd: git submodule update --init --recursive
+  - sh: git submodule update --init --recursive
+
 build_script:
   - cmd: mkdir build
   - cmd: cd build

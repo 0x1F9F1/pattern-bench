@@ -281,12 +281,14 @@ int main()
 
     fmt::print("End Scan\n\n");
 
+    const double total_scan_length_gb = (reg.size() * TEST_COUNT) / double(1024 * 1024 * 1024);
+
     for (size_t i = 0; i < PATTERNS.size(); ++i)
     {
         const auto& pattern = *PATTERNS[i];
 
         long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.Elapsed).count();
 
-        fmt::print("{0} | {1:<32} | {2:>4} ms | {3:>3} failed\n", i, pattern.GetName(), elapsed, pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:>5} ms | {3:>3.2} GB/s | {4} failed\n", i, pattern.GetName(), elapsed, total_scan_length_gb / (elapsed / double(1000)), pattern.Failed);
     }
 }
