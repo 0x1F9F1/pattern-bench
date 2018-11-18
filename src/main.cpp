@@ -65,10 +65,11 @@ std::mt19937 create_twister(uint32_t& seed)
 struct scan_bench
 {
 private:
-    byte* raw_region_ {nullptr};
-
     byte* raw_data_ {nullptr};
     size_t raw_size_ {0};
+
+    byte* full_data_ {nullptr};
+    size_t full_size_ {0};
 
     byte* data_ {nullptr};
     size_t size_ {0};
@@ -85,12 +86,14 @@ public:
     {
         size_t page_size = mem::page_size();
 
-        raw_size_ = page_size * PAGE_COUNT;
-        raw_region_ = static_cast<byte*>(mem::protect_alloc(raw_size_ + (page_size * 2), mem::prot_flags::RW));
-        raw_data_ = raw_region_ + page_size;
+        full_size_ = page_size * PAGE_COUNT;
+        raw_size_ = full_size_ + (page_size * 2);
+        raw_data_ = static_cast<byte*>(mem::protect_alloc(raw_size_, mem::prot_flags::RW));
 
-        mem::protect_modify(raw_region_, page_size, mem::prot_flags::NONE);
-        mem::protect_modify(raw_region_ + page_size + raw_size_, page_size, mem::prot_flags::NONE);
+        full_data_ = raw_data_ + page_size;
+
+        mem::protect_modify(raw_data_, page_size, mem::prot_flags::NONE);
+        mem::protect_modify(raw_data_ + raw_size_ - page_size, page_size, mem::prot_flags::NONE);
 
         std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
 
@@ -99,7 +102,7 @@ public:
 
     ~scan_bench()
     {
-        mem::protect_free(raw_region_);
+        mem::protect_free(raw_data_, raw_size_);
     }
 
     byte* data() noexcept
@@ -145,8 +148,8 @@ public:
 
         size_t variation = size_dist(rng_);
 
-        data_ = raw_data_ + variation;
-        size_ = raw_size_ - variation;
+        data_ = full_data_ + variation;
+        size_ = full_size_ - variation;
 
         std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
 
@@ -259,14 +262,16 @@ int main()
 
                 pattern->Failed++;
             }
-            
+
             stopwatch::time_point end_time = stopwatch::now();
 
             pattern->Elapsed += end_time - start_time;
         }
     }
 
-    std::sort(PATTERNS.begin(), PATTERNS.end(), [ ] (const auto& lhs, const auto& rhs)
+    std::sort(PATTERNS.begin(), PATTERNS.end(),
+        [ ] (const std::unique_ptr<pattern_scanner>& lhs,
+             const std::unique_ptr<pattern_scanner>& rhs)
     {
         if (lhs->Failed != rhs->Failed)
             return lhs->Failed < rhs->Failed;

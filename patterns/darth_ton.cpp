@@ -2,7 +2,6 @@
 
 #include "pattern_entry.h"
 
-#include <intrin.h>
 #include <immintrin.h>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -76,7 +75,7 @@ std::vector<const byte*> Search2( const uint8_t* data, const uint32_t size, cons
     {
         for (size_t j = 0; j < min( len, 16 ) - 1; ++j)
             if (mask[16 * i + j] == 'x')
-                _bittestandset( (long*)&parts[i].mask, j );
+                parts[i].mask |= (1 << j);
 
         parts[i].needle = _mm_loadu_si128( (const __m128i*)(pattern + i * 16) );
     }

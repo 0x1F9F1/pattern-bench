@@ -54,7 +54,7 @@ void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
     Out->Size = l;
 }
 
-__forceinline bool Matches(const uint8_t* Data, PatternData* Patterns)
+MEM_STRONG_INLINE bool Matches(const uint8_t* Data, PatternData* Patterns)
 {
     auto k = Data + Patterns->Skip[0];
 
@@ -90,8 +90,8 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
         auto p = Data + i;
         auto b = _mm256_loadu_si256((const __m256i*)p);
 
-        if (_mm256_test_all_zeros(b, b) == 1)
-            continue;
+        // if (_mm256_test_all_zeros(b, b) == 1)
+        //     continue;
 
         auto f = _mm_cmpestri(d.Value[0], d.Length[0], _mm256_extractf128_si256(b, 0), 16, _SIDD_CMP_EQUAL_ORDERED);
 
