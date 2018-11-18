@@ -21,16 +21,19 @@
 
 #include <mem/pattern.h>
 
-struct mem_pattern_scanner
+#include <mem/boyer_moore_scanner.h>
+
+struct mem_boyer_moore_pattern_scanner
     : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(const byte* bytes, const char* mask, const byte* data, size_t length) const override
     {
-        mem::pattern current_pattern((const char*) pattern, mask);
+        mem::pattern pattern(bytes, mask);
+        mem::boyer_moore_scanner scanner(pattern);
 
         std::vector<const byte*> results;
 
-        current_pattern.scan_predicate({ data, length }, [&] (mem::pointer result)
+        scanner({ data, length }, [&] (mem::pointer result)
         {
             results.push_back(result.as<const byte*>());
 
@@ -42,26 +45,25 @@ struct mem_pattern_scanner
 
     virtual const char* GetName() const override
     {
-        return "mem::pattern";
+        return "mem::boyer_moore_scanner";
     }
 };
 
-REGISTER_PATTERN(mem_pattern_scanner);
+REGISTER_PATTERN(mem_boyer_moore_pattern_scanner);
 
-#include <mem/simd-pattern.h>
+#include <mem/simd_scanner.h>
 
 struct mem_simd_pattern_scanner
     : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(const byte* bytes, const char* mask, const byte* data, size_t length) const override
     {
-        mem::pattern_settings settings {0, 0, '?'};
-        mem::pattern current_pattern((const char*) pattern, mask, settings);
-        mem::simd_pattern current_pattern_simd(current_pattern);
+        mem::pattern pattern(bytes, mask);
+        mem::simd_scanner scanner(pattern);
 
         std::vector<const byte*> results;
 
-        current_pattern_simd.scan_predicate({ data, length }, [&] (mem::pointer result)
+        scanner({ data, length }, [&] (mem::pointer result)
         {
             results.push_back(result.as<const byte*>());
 
@@ -73,7 +75,7 @@ struct mem_simd_pattern_scanner
 
     virtual const char* GetName() const override
     {
-        return "mem::simd_pattern";
+        return "mem::simd_scanner";
     }
 };
 
