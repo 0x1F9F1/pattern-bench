@@ -209,6 +209,19 @@ public:
             if (LOG_LEVEL > 2)
                 fmt::print("{0:<32} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
 
+            if (LOG_LEVEL > 3)
+            {
+                fmt::print("Got:\n");
+
+                for (size_t v : shifted)
+                    fmt::print("> 0x{0:X}\n", v);
+
+                fmt::print("Expected:\n");
+
+                for (size_t v : expected_)
+                    fmt::print("> 0x{0:X}\n", v);
+            }
+
             return false;
         }
 
@@ -241,7 +254,7 @@ int main()
 
         for (auto& pattern : PATTERNS)
         {
-            stopwatch::time_point start_time = stopwatch::now();
+            uint64_t start_clock = mem::rdtsc();
 
             try
             {
@@ -263,9 +276,9 @@ int main()
                 pattern->Failed++;
             }
 
-            stopwatch::time_point end_time = stopwatch::now();
+            uint64_t end_clock = mem::rdtsc();
 
-            pattern->Elapsed += end_time - start_time;
+            pattern->Elapsed += end_clock - start_clock;
         }
     }
 
@@ -281,14 +294,12 @@ int main()
 
     fmt::print("End Scan\n\n");
 
-    const double total_scan_length_gb = (reg.size() * TEST_COUNT) / double(1024 * 1024 * 1024);
+    const size_t total_scan_length = reg.size() * TEST_COUNT;
 
     for (size_t i = 0; i < PATTERNS.size(); ++i)
     {
         const auto& pattern = *PATTERNS[i];
 
-        long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(pattern.Elapsed).count();
-
-        fmt::print("{0} | {1:<32} | {2:>5} ms | {3:>3.2} GB/s | {4} failed\n", i, pattern.GetName(), elapsed, total_scan_length_gb / (elapsed / double(1000)), pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>5.3f} cycles/byte | {4} failed\n", i, pattern.GetName(), pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
     }
 }

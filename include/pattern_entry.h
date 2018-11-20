@@ -22,18 +22,14 @@
 #include <mem/mem.h>
 #include <mem/init_function.h>
 
-#include <chrono>
-#include <vector>
 #include <memory>
 #include <vector>
 
 using mem::byte;
 
-using stopwatch = std::chrono::steady_clock;
-
 struct pattern_scanner
 {
-    stopwatch::duration Elapsed {0};
+    uint64_t Elapsed {0};
     size_t Failed {0};
 
     virtual ~pattern_scanner() = default;
