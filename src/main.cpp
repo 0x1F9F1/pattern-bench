@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <cassert>
+#include <fstream>
 
 #include <mem/mem.h>
 #include <mem/pattern.h>
@@ -32,14 +33,16 @@
 #include <mem/init_function.h>
 #include <mem/init_function-inl.h>
 
+#include <mem/data_buffer.h>
+
 #include <fmt/format.h>
 
 #include "pattern_entry.h"
 
-static constexpr const size_t PAGE_COUNT = 64;
-static constexpr const size_t TEST_COUNT = 1024 * 16;
-static constexpr const uint32_t RNG_SEED = 0;
-static constexpr const size_t LOG_LEVEL = 0;
+static constexpr const size_t REGION_SIZE = 64 * 1024 * 1024;
+static constexpr const size_t TEST_COUNT  = 512;
+static constexpr const size_t LOG_LEVEL   = 0;
+static constexpr const uint32_t RNG_SEED  = 0;
 
 using mem::byte;
 
@@ -62,6 +65,24 @@ std::mt19937 create_twister(uint32_t& seed)
     return result;
 }
 
+mem::byte_buffer read_file(const char* path)
+{
+    std::ifstream input(path, std::ifstream::binary | std::ifstream::ate);
+
+    size_t length = static_cast<size_t>(input.tellg());
+
+    input.seekg(0);
+
+    mem::byte_buffer result(length);
+
+    if (!input.read(reinterpret_cast<char*>(result.data()), result.size()))
+    {
+        result.resize(0);
+    }
+
+    return result;
+}
+
 struct scan_bench
 {
 private:
@@ -77,16 +98,39 @@ private:
     uint32_t seed_ {RNG_SEED};
     std::mt19937 rng_ {create_twister(seed_)};
 
-    std::string pattern_;
+    std::vector<byte> pattern_;
     std::string masks_;
     std::unordered_set<size_t> expected_;
 
 public:
-    scan_bench()
+    scan_bench() = default;
+
+    scan_bench(const scan_bench&) = delete;
+    scan_bench(scan_bench&&) = delete;
+
+    ~scan_bench()
+    {
+        mem::protect_free(raw_data_, raw_size_);
+    }
+
+    void reset(size_t region_size)
+    {
+        reset(nullptr, region_size);
+    }
+
+    void reset(const char* file_name)
+    {
+        mem::byte_buffer region_data = read_file(file_name);
+
+        reset(region_data.data(), region_data.size());
+    }
+
+    void reset(const byte* region_data, size_t region_size)
     {
         size_t page_size = mem::page_size();
 
-        full_size_ = page_size * PAGE_COUNT;
+        full_size_ = (region_size + page_size - 1) / page_size * page_size;
+
         raw_size_ = full_size_ + (page_size * 2);
         raw_data_ = static_cast<byte*>(mem::protect_alloc(raw_size_, mem::prot_flags::RW));
 
@@ -95,17 +139,27 @@ public:
         mem::protect_modify(raw_data_, page_size, mem::prot_flags::NONE);
         mem::protect_modify(raw_data_ + raw_size_ - page_size, page_size, mem::prot_flags::NONE);
 
-        std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
+        if (region_data)
+        {
+            size_t extra = (full_size_ - region_size);
 
-        std::generate_n(data(), size(), [&] { return (byte) byte_dist(rng_); });
+            std::memset(full_data_, 0, extra);
+            std::memcpy(full_data_ + extra, region_data, region_size);
+        }
+        else
+        {
+            std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
+
+            std::generate_n(full_data_, full_size_, [&] { return (byte) byte_dist(rng_); });
+        }
     }
 
-    ~scan_bench()
+    size_t full_size() const noexcept
     {
-        mem::protect_free(raw_data_, raw_size_);
+        return full_size_;
     }
 
-    byte* data() noexcept
+    const byte* data() const noexcept
     {
         return data_;
     }
@@ -117,12 +171,12 @@ public:
 
     const byte* pattern() const noexcept
     {
-        return (const byte*) pattern_.c_str();
+        return pattern_.data();
     }
 
     const char* masks() const noexcept
     {
-        return masks_.c_str();
+        return masks_.data();
     }
 
     uint32_t seed() const noexcept
@@ -160,23 +214,26 @@ public:
         pattern_.resize(pattern_length);
         masks_.resize(pattern_length);
 
-        bool all_masks = true;
+        std::bernoulli_distribution mask_dist(0.9);
 
-        std::bernoulli_distribution mask_dist(0.1);
+        bool all_masks = true;
 
         do
         {
-            std::generate_n(&pattern_[0], pattern_.size(), [&] { return (char) byte_dist(rng_); });
-            std::generate_n(&masks_[0], masks_.size(), [&] { return mask_dist(rng_) ? '?' : 'x'; });
-
-            all_masks = true;
-
-            for (size_t i = 0; i < pattern_.size(); ++i)
+            for (size_t i = 0; i < pattern_length; ++i)
             {
-                if (masks_[i] == '?')
-                    pattern_[i] = 0;
-                else
+                if (mask_dist(rng_))
+                {
+                    pattern_[i] = (char) byte_dist(rng_);
+                    masks_[i] = 'x';
+
                     all_masks = false;
+                }
+                else
+                {
+                    pattern_[i] = 0x00;
+                    masks_[i] = '?';
+                }
             }
         } while (all_masks);
 
@@ -240,13 +297,28 @@ public:
     }
 };
 
-int main()
+int main(int argc, const char* argv[])
 {
     mem::init_function::init();
 
     scan_bench reg;
 
-    fmt::print("Begin Scan: Seed: 0x{0:08X}, Pages: {1}, Tests: {2}\n", reg.seed(), PAGE_COUNT, TEST_COUNT);
+    if (argc > 1)
+    {
+        const char* file_name = argv[1];
+
+        fmt::print("Scanning file: {}\n", file_name);
+
+        reg.reset(file_name);
+    }
+    else
+    {
+        fmt::print("Scanning random data\n");
+
+        reg.reset(REGION_SIZE);
+    }
+
+    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}\n", reg.seed(), reg.full_size(), TEST_COUNT);
 
     for (size_t i = 0; i < TEST_COUNT; ++i)
     {
@@ -300,6 +372,6 @@ int main()
     {
         const auto& pattern = *PATTERNS[i];
 
-        fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>5.3f} cycles/byte | {4} failed\n", i, pattern.GetName(), pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
+        fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte | {4} failed\n", i, pattern.GetName(), pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
     }
 }
