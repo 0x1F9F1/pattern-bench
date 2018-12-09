@@ -30,6 +30,8 @@
 #include <mem/platform.h>
 #include <mem/platform-inl.h>
 
+#include <mem/arch.h>
+
 #include <mem/init_function.h>
 #include <mem/init_function-inl.h>
 
@@ -37,33 +39,16 @@
 
 #include <fmt/format.h>
 
+#include <argh.h>
+
 #include "pattern_entry.h"
 
-static constexpr const size_t REGION_SIZE = 64 * 1024 * 1024;
-static constexpr const size_t TEST_COUNT  = 512;
-static constexpr const size_t LOG_LEVEL   = 0;
-static constexpr const uint32_t RNG_SEED  = 0;
+static const size_t DEFAULT_REGION_SIZE = 32 * 1024 * 1024;
+static const size_t DEFAULT_TEST_COUNT  = 256;
+
+static size_t LOG_LEVEL = 0;
 
 using mem::byte;
-
-std::mt19937 create_twister(uint32_t& seed)
-{
-    if (seed == 0)
-    {
-        seed = std::random_device{}();
-    }
-
-    std::minstd_rand0 source(seed);
-
-    // Magic number 624: The number of unsigned ints the MT uses as state
-    std::vector<unsigned int> random_data(624);
-    std::generate(begin(random_data), end(random_data), source);
-
-    std::seed_seq seeds(begin(random_data), end(random_data));
-    std::mt19937 result(seeds);
-
-    return result;
-}
 
 mem::byte_buffer read_file(const char* path)
 {
@@ -77,7 +62,7 @@ mem::byte_buffer read_file(const char* path)
 
     if (!input.read(reinterpret_cast<char*>(result.data()), result.size()))
     {
-        result.resize(0);
+        result.reset();
     }
 
     return result;
@@ -95,15 +80,18 @@ private:
     byte* data_ {nullptr};
     size_t size_ {0};
 
-    uint32_t seed_ {RNG_SEED};
-    std::mt19937 rng_ {create_twister(seed_)};
+    uint32_t seed_ {0};
+    std::mt19937 rng_ {};
 
     std::vector<byte> pattern_;
     std::string masks_;
     std::unordered_set<size_t> expected_;
 
 public:
-    scan_bench() = default;
+    scan_bench(uint32_t seed)
+        : seed_(seed)
+        , rng_(seed_)
+    { }
 
     scan_bench(const scan_bench&) = delete;
     scan_bench(scan_bench&&) = delete;
@@ -301,31 +289,55 @@ int main(int argc, const char* argv[])
 {
     mem::init_function::init();
 
-    scan_bench reg;
+    argh::parser cmdl(argc, argv);
 
-    if (argc > 1)
+    cmdl({ "-l", "--loglevel" }) >> LOG_LEVEL;
+
+    uint32_t seed = 0;
+
+    if (!(cmdl({ "-s", "--seed" }) >> seed))
     {
-        const char* file_name = argv[1];
+        seed = std::random_device{}();
+    }
 
+    scan_bench reg(seed);
+
+    std::string file_name = cmdl({ "-f", "--file" }).str();
+
+    if (!file_name.empty())
+    {
         fmt::print("Scanning file: {}\n", file_name);
 
-        reg.reset(file_name);
+        reg.reset(file_name.c_str());
     }
     else
     {
+        size_t region_size = DEFAULT_REGION_SIZE;
+
+        cmdl({ "-s", "--size" }) >> std::hex >> region_size;
+
         fmt::print("Scanning random data\n");
 
-        reg.reset(REGION_SIZE);
+        reg.reset(region_size);
     }
 
-    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}\n", reg.seed(), reg.full_size(), TEST_COUNT);
+    size_t test_count = DEFAULT_TEST_COUNT;
 
-    for (size_t i = 0; i < TEST_COUNT; ++i)
+    cmdl({ "-t", "--tests" }) >> test_count;
+
+    bool skip_fails = !cmdl[{ "-f", "--full" }];
+
+    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}\n", reg.seed(), reg.full_size(), test_count, skip_fails);
+
+    for (size_t i = 0; i < test_count; ++i)
     {
         reg.generate();
 
         for (auto& pattern : PATTERNS)
         {
+            if (skip_fails && pattern->Failed != 0)
+                continue;
+
             uint64_t start_clock = mem::rdtsc();
 
             try
@@ -366,12 +378,19 @@ int main(int argc, const char* argv[])
 
     fmt::print("End Scan\n\n");
 
-    const size_t total_scan_length = reg.size() * TEST_COUNT;
+    const size_t total_scan_length = reg.size() * test_count;
 
     for (size_t i = 0; i < PATTERNS.size(); ++i)
     {
         const auto& pattern = *PATTERNS[i];
 
-        fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte | {4} failed\n", i, pattern.GetName(), pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
+        if (!(pattern.Failed && skip_fails))
+        {
+            fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte | {4} failed\n", i, pattern.GetName(), pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
+        }
+        else
+        {
+            fmt::print("{0} | {1:<32} | failed\n", i, pattern.GetName());
+        }
     }
 }

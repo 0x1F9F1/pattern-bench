@@ -87,4 +87,4 @@ struct mrexodia_pattern_scanner
     }
 };
 
-// REGISTER_PATTERN(mrexodia_pattern_scanner);
+REGISTER_PATTERN(mrexodia_pattern_scanner);

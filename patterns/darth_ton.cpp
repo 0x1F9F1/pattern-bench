@@ -142,4 +142,4 @@ struct darth_ton2_pattern_scanner
     }
 };
 
-// REGISTER_PATTERN(darth_ton2_pattern_scanner);
+REGISTER_PATTERN(darth_ton2_pattern_scanner);
