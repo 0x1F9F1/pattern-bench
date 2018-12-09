@@ -23,8 +23,11 @@ build_script:
   - cmd: cd build
   - cmd: cmake .. -G "%CMAKE_GENERATOR%" -DCMAKE_BUILD_TYPE="%BUILD_TYPE%"
   - cmd: cmake --build . --config "%BUILD_TYPE%"
+  - cmd: cd ../bin/%BUILD_TYPE%
+  - cmd: pattern-bench.exe --size=800000 --count=128 --full
 
   - sh: mkdir build
   - sh: cd build
   - sh: cmake .. -G "$CMAKE_GENERATOR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
   - sh: cmake --build . --config "$BUILD_TYPE"
+  - sh: ../bin/pattern-bench --size=800000 --count=128 --full
