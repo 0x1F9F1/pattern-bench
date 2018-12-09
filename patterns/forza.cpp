@@ -249,4 +249,4 @@ struct forza_simd_pattern_scanner
     }
 };
 
-REGISTER_PATTERN(forza_simd_pattern_scanner);
+// REGISTER_PATTERN(forza_simd_pattern_scanner);
