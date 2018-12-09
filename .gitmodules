@@ -6,4 +6,4 @@
 	url = https://github.com/fmtlib/fmt.git
 [submodule "vendor/argh"]
 	path = vendor/argh
-	url = https://github.com/adishavit/argh.git
+	url = https://github.com/DatBrick/argh.git
