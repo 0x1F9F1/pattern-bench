@@ -290,8 +290,6 @@ static mem::cmd_param cmd_log_level {"loglevel"};
 static mem::cmd_param cmd_full_scan {"full"};
 static mem::cmd_param cmd_filter {"filter"};
 
-#include <Windows.h>
-
 int main(int argc, char** argv)
 {
     mem::init_function::init();
