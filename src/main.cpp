@@ -28,23 +28,20 @@
 #include <mem/utils.h>
 
 #include <mem/platform.h>
-#include <mem/platform-inl.h>
 
 #include <mem/arch.h>
 
 #include <mem/init_function.h>
 #include <mem/init_function-inl.h>
 
+#include <mem/cmd_param.h>
+#include <mem/cmd_param-inl.h>
+
 #include <mem/data_buffer.h>
 
 #include <fmt/format.h>
 
-#include <argh.h>
-
 #include "pattern_entry.h"
-
-static const size_t DEFAULT_REGION_SIZE = 32 * 1024 * 1024;
-static const size_t DEFAULT_TEST_COUNT  = 256;
 
 static size_t LOG_LEVEL = 0;
 
@@ -285,55 +282,88 @@ public:
     }
 };
 
-int main(int argc, const char* argv[])
+static mem::cmd_param cmd_region_size {"size"};
+static mem::cmd_param cmd_test_count {"tests"};
+static mem::cmd_param cmd_rng_seed {"seed"};
+static mem::cmd_param cmd_test_file {"file"};
+static mem::cmd_param cmd_log_level {"loglevel"};
+static mem::cmd_param cmd_full_scan {"full"};
+static mem::cmd_param cmd_filter {"filter"};
+
+#include <Windows.h>
+
+int main(int argc, char** argv)
 {
     mem::init_function::init();
 
-    argh::parser cmdl(argc, argv);
+    mem::cmd_param::init(argc, argv);
 
-    cmdl({ "-l", "--loglevel" }) >> LOG_LEVEL;
+    const char* filter = cmd_filter.get();
+
+    if (filter)
+    {
+        fmt::print("Filter: {}\n", filter);
+
+        auto iter = PATTERN_SCANNERS.begin();
+
+        while (iter != PATTERN_SCANNERS.end())
+        {
+            const char* name = (*iter)->GetName();
+
+            if (std::strstr(name, filter))
+            {
+                ++iter;
+            }
+            else
+            {
+                iter = PATTERN_SCANNERS.erase(iter);
+            }
+        }
+    }
+
+    LOG_LEVEL = cmd_log_level.get_or<size_t>(0);
 
     uint32_t seed = 0;
 
-    if (!(cmdl({ "-s", "--seed" }) >> seed))
+    if (!cmd_rng_seed.get(seed))
     {
         seed = std::random_device{}();
     }
 
     scan_bench reg(seed);
 
-    std::string file_name = cmdl({ "-f", "--file" }).str();
-
-    if (!file_name.empty())
+    if (const char* file_name = cmd_test_file.get())
     {
         fmt::print("Scanning file: {}\n", file_name);
 
-        reg.reset(file_name.c_str());
+        reg.reset(file_name);
     }
     else
     {
-        size_t region_size = DEFAULT_REGION_SIZE;
+        size_t region_size = cmd_region_size.get_or<size_t>(32 * 1024 * 1024);
 
-        cmdl({ "-s", "--size" }) >> std::hex >> region_size;
+        if (region_size == 0)
+        {
+            fmt::print("Invalid region size\n");
+
+            std::abort();
+        }
 
         fmt::print("Scanning random data\n");
 
         reg.reset(region_size);
     }
 
-    size_t test_count = DEFAULT_TEST_COUNT;
+    size_t test_count = cmd_test_count.get_or<size_t>(256);
+    bool skip_fails = !cmd_full_scan.get<bool>();
 
-    cmdl({ "-t", "--tests" }) >> test_count;
-
-    bool skip_fails = !cmdl[{ "-f", "--full" }];
-
-    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}\n", reg.seed(), reg.full_size(), test_count, skip_fails);
+    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}\n", reg.seed(), reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size());
 
     for (size_t i = 0; i < test_count; ++i)
     {
         reg.generate();
 
-        for (auto& pattern : PATTERNS)
+        for (auto& pattern : PATTERN_SCANNERS)
         {
             if (skip_fails && pattern->Failed != 0)
                 continue;
@@ -366,7 +396,7 @@ int main(int argc, const char* argv[])
         }
     }
 
-    std::sort(PATTERNS.begin(), PATTERNS.end(),
+    std::sort(PATTERN_SCANNERS.begin(), PATTERN_SCANNERS.end(),
         [ ] (const std::unique_ptr<pattern_scanner>& lhs,
              const std::unique_ptr<pattern_scanner>& rhs)
     {
@@ -380,9 +410,9 @@ int main(int argc, const char* argv[])
 
     const size_t total_scan_length = reg.size() * test_count;
 
-    for (size_t i = 0; i < PATTERNS.size(); ++i)
+    for (size_t i = 0; i < PATTERN_SCANNERS.size(); ++i)
     {
-        const auto& pattern = *PATTERNS[i];
+        const auto& pattern = *PATTERN_SCANNERS[i];
 
         if (!(pattern.Failed && skip_fails))
         {
