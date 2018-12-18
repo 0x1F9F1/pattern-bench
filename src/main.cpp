@@ -406,7 +406,7 @@ int main(int argc, char** argv)
 
     fmt::print("End Scan\n\n");
 
-    const size_t total_scan_length = reg.full_size() * test_count;
+    const uint64_t total_scan_length = uint64_t(reg.full_size()) * test_count;
 
     for (size_t i = 0; i < PATTERN_SCANNERS.size(); ++i)
     {
