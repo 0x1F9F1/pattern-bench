@@ -352,8 +352,8 @@ int main(int argc, char** argv)
         reg.reset(region_size);
     }
 
-    size_t test_count = cmd_test_count.get_or<size_t>(256);
-    bool skip_fails = !cmd_full_scan.get<bool>();
+    const size_t test_count = cmd_test_count.get_or<size_t>(256);
+    const bool skip_fails = !cmd_full_scan.get<bool>();
 
     fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}\n", reg.seed(), reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size());
 
@@ -406,7 +406,7 @@ int main(int argc, char** argv)
 
     fmt::print("End Scan\n\n");
 
-    const size_t total_scan_length = reg.size() * test_count;
+    const size_t total_scan_length = reg.full_size() * test_count;
 
     for (size_t i = 0; i < PATTERN_SCANNERS.size(); ++i)
     {
