@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+
 project(pattern-bench CXX)
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    add_compile_options(/MP /EHa /arch:AVX2)
+else()
+    add_compile_options(-mavx2)
+endif()
 
 add_executable(${PROJECT_NAME}
     src/main.cpp
@@ -24,12 +33,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME}
     mem fmt)
-
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa /arch:AVX2")
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
-endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD 11

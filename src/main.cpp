@@ -321,6 +321,13 @@ int main(int argc, char** argv)
             }
         }
     }
+    
+    if (PATTERN_SCANNERS.empty())
+    {
+        fmt::print("No Scanners\n");
+
+        return 1;
+    }
 
     uint32_t seed = 0;
 
@@ -360,12 +367,17 @@ int main(int argc, char** argv)
 
     fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}\n", reg.seed(), reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size());
 
+    mem::execution_handler handler;
+
     for (size_t i = 0; i < test_count; ++i)
     {
         reg.generate();
 
         if (test_index != SIZE_MAX && i != test_index)
             continue;
+
+        if (!(i % 25))
+            fmt::print("{}/{}...\n", i, test_count);
 
         for (auto& pattern : PATTERN_SCANNERS)
         {
@@ -376,7 +388,10 @@ int main(int argc, char** argv)
 
             try
             {
-                std::vector<const byte*> results = pattern->Scan(reg.pattern(), reg.masks(), reg.data(), reg.size());
+                std::vector<const byte*> results = handler.execute([&]
+                {
+                    return pattern->Scan(reg.pattern(), reg.masks(), reg.data(), reg.size());
+                });
 
                 if (!reg.check_results(*pattern, results))
                 {
