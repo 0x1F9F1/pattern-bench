@@ -27,7 +27,8 @@
 #include <mem/pattern.h>
 #include <mem/utils.h>
 
-#include <mem/platform.h>
+#include <mem/protect.h>
+#include <mem/execution_handler.h>
 
 #include <mem/arch.h>
 
@@ -400,6 +401,13 @@ int main(int argc, char** argv)
 
                     pattern->Failed++;
                 }
+            }
+            catch (const std::exception& ex)
+            {
+                if (LOG_LEVEL > 0)
+                    fmt::print("{0:<32} - Failed test {1}: {2}\n", pattern->GetName(), i, ex.what());
+
+                pattern->Failed++;
             }
             catch (...)
             {
