@@ -33,7 +33,6 @@
 #include <mem/arch.h>
 
 #include <mem/init_function.h>
-#include <mem/init_function-inl.h>
 
 #include <mem/cmd_param.h>
 #include <mem/cmd_param-inl.h>
