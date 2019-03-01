@@ -445,22 +445,26 @@ int main(int argc, char** argv)
     {
         const auto& pattern = *PATTERN_SCANNERS[i];
 
+        fmt::print("{:<32} | ", pattern.GetName());
+
         if (skip_fails)
         {
             if (pattern.Failed)
             {
-                fmt::print("{0} | {1:<32} | failed\n", i, pattern.GetName());
+                fmt::print("failed");
             }
             else
             {
-                fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte\n", i, pattern.GetName(),
-                    pattern.Elapsed, double(pattern.Elapsed) / total_scan_length);
+                fmt::print("{:>12} cycles = {:>6.3f} cycles/byte", pattern.Elapsed,
+                    double(pattern.Elapsed) / total_scan_length);
             }
         }
         else
         {
-            fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte | {4} failed\n", i, pattern.GetName(),
+            fmt::print("{:>12} cycles = {:>6.3f} cycles/byte | {} failed",
                 pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
         }
+
+        fmt::print("\n");
     }
 }
