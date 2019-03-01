@@ -17,25 +17,25 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+#include <cassert>
+#include <chrono>
+#include <fstream>
 #include <random>
 #include <unordered_set>
-#include <chrono>
-#include <cassert>
-#include <fstream>
 
 #include <mem/mem.h>
 #include <mem/pattern.h>
 #include <mem/utils.h>
 
-#include <mem/protect.h>
 #include <mem/execution_handler.h>
+#include <mem/protect.h>
 
 #include <mem/arch.h>
 
 #include <mem/init_function.h>
 
-#include <mem/cmd_param.h>
 #include <mem/cmd_param-inl.h>
+#include <mem/cmd_param.h>
 
 #include <mem/data_buffer.h>
 
@@ -88,7 +88,7 @@ public:
     scan_bench(uint32_t seed)
         : seed_(seed)
         , rng_(seed_)
-    { }
+    {}
 
     scan_bench(const scan_bench&) = delete;
     scan_bench(scan_bench&&) = delete;
@@ -249,7 +249,8 @@ public:
         if (shifted.size() != expected_.size())
         {
             if (LOG_LEVEL > 2)
-                fmt::print("{0:<32} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
+                fmt::print(
+                    "{0:<32} - Got {1} results, Expected {2}\n", scanner.GetName(), shifted.size(), expected_.size());
 
             if (LOG_LEVEL > 3)
             {
@@ -293,8 +294,11 @@ static mem::cmd_param cmd_test_index {"test"};
 
 int main(int argc, char** argv)
 {
-    mem::init_function::init();
+#if defined(_WIN32)
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+#endif
 
+    mem::init_function::init();
     mem::cmd_param::init(argc, argv);
 
     LOG_LEVEL = cmd_log_level.get_or<size_t>(0);
@@ -321,7 +325,7 @@ int main(int argc, char** argv)
             }
         }
     }
-    
+
     if (PATTERN_SCANNERS.empty())
     {
         fmt::print("No Scanners\n");
@@ -333,7 +337,7 @@ int main(int argc, char** argv)
 
     if (!cmd_rng_seed.get(seed))
     {
-        seed = std::random_device{}();
+        seed = std::random_device {}();
     }
 
     scan_bench reg(seed);
@@ -365,7 +369,8 @@ int main(int argc, char** argv)
 
     const size_t test_index = cmd_test_index.get_or<size_t>(SIZE_MAX);
 
-    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}\n", reg.seed(), reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size());
+    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}\n", reg.seed(),
+        reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size());
 
     mem::execution_handler handler;
 
@@ -376,8 +381,11 @@ int main(int argc, char** argv)
         if (test_index != SIZE_MAX && i != test_index)
             continue;
 
-        if (!(i % 25))
-            fmt::print("{}/{}...\n", i, test_count);
+        if (LOG_LEVEL > 0)
+        {
+            if (!(i % 25))
+                fmt::print("{}/{}...\n", i, test_count);
+        }
 
         for (auto& pattern : PATTERN_SCANNERS)
         {
@@ -388,15 +396,14 @@ int main(int argc, char** argv)
 
             try
             {
-                std::vector<const byte*> results = handler.execute([&]
-                {
-                    return pattern->Scan(reg.pattern(), reg.masks(), reg.data(), reg.size());
-                });
+                std::vector<const byte*> results =
+                    handler.execute([&] { return pattern->Scan(reg.pattern(), reg.masks(), reg.data(), reg.size()); });
 
                 if (!reg.check_results(*pattern, results))
                 {
                     if (LOG_LEVEL > 1)
-                        fmt::print("{0:<32} - Failed test {1} ({2}, {3})\n", pattern->GetName(), i, mem::as_hex({ reg.pattern(), strlen(reg.masks()) }), reg.masks());
+                        fmt::print("{0:<32} - Failed test {1} ({2}, {3})\n", pattern->GetName(), i,
+                            mem::as_hex({reg.pattern(), strlen(reg.masks())}), reg.masks());
 
                     pattern->Failed++;
                 }
@@ -423,30 +430,37 @@ int main(int argc, char** argv)
     }
 
     std::sort(PATTERN_SCANNERS.begin(), PATTERN_SCANNERS.end(),
-        [ ] (const std::unique_ptr<pattern_scanner>& lhs,
-             const std::unique_ptr<pattern_scanner>& rhs)
-    {
-        if (lhs->Failed != rhs->Failed)
-            return lhs->Failed < rhs->Failed;
+        [](const std::unique_ptr<pattern_scanner>& lhs, const std::unique_ptr<pattern_scanner>& rhs) {
+            if ((lhs->Failed != 0) != (rhs->Failed != 0))
+                return lhs->Failed < rhs->Failed;
 
-        return lhs->Elapsed < rhs->Elapsed;
-    });
+            return lhs->Elapsed < rhs->Elapsed;
+        });
 
     fmt::print("End Scan\n\n");
 
-    const uint64_t total_scan_length = uint64_t(reg.full_size()) * test_count;
+    const uint64_t total_scan_length = static_cast<uint64_t>(reg.full_size()) * test_count;
 
     for (size_t i = 0; i < PATTERN_SCANNERS.size(); ++i)
     {
         const auto& pattern = *PATTERN_SCANNERS[i];
 
-        if (!(pattern.Failed && skip_fails))
+        if (skip_fails)
         {
-            fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte | {4} failed\n", i, pattern.GetName(), pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
+            if (pattern.Failed)
+            {
+                fmt::print("{0} | {1:<32} | failed\n", i, pattern.GetName());
+            }
+            else
+            {
+                fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte\n", i, pattern.GetName(),
+                    pattern.Elapsed, double(pattern.Elapsed) / total_scan_length);
+            }
         }
         else
         {
-            fmt::print("{0} | {1:<32} | failed\n", i, pattern.GetName());
+            fmt::print("{0} | {1:<32} | {2:>12} cycles = {3:>6.3f} cycles/byte | {4} failed\n", i, pattern.GetName(),
+                pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
         }
     }
 }
