@@ -461,8 +461,8 @@ int main(int argc, char** argv)
         }
         else
         {
-            fmt::print("{:>12} cycles = {:>6.3f} cycles/byte | {} failed",
-                pattern.Elapsed, double(pattern.Elapsed) / total_scan_length, pattern.Failed);
+            fmt::print("{:>12} cycles = {:>6.3f} cycles/byte | {} failed", pattern.Elapsed,
+                double(pattern.Elapsed) / total_scan_length, pattern.Failed);
         }
 
         fmt::print("\n");

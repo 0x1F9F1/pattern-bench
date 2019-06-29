@@ -6,11 +6,11 @@
 
 struct PatternData
 {
-    uint32_t    Count;
-    uint32_t    Size;
-    uint32_t    Length[16];
-    uint32_t    Skip[16];
-    __m128i     Value[16];
+    uint32_t Count;
+    uint32_t Size;
+    uint32_t Length[16];
+    uint32_t Skip[16];
+    __m128i Value[16];
 };
 
 void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
@@ -42,9 +42,9 @@ void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
 
         auto c = Out->Count;
 
-        Out->Length[c]  = sl;
-        Out->Skip[c]    = sl + ml;
-        Out->Value[c]   = _mm_loadu_si128((const __m128i*)((uint8_t*)Signature + i));
+        Out->Length[c] = sl;
+        Out->Skip[c] = sl + ml;
+        Out->Value[c] = _mm_loadu_si128((const __m128i*) ((uint8_t*) Signature + i));
 
         Out->Count++;
 
@@ -62,7 +62,8 @@ MEM_STRONG_INLINE bool Matches(const uint8_t* Data, PatternData* Patterns)
     {
         auto l = Patterns->Length[i];
 
-        if (_mm_cmpestri(Patterns->Value[i], l, _mm_loadu_si128((const __m128i*)k), l, _SIDD_CMP_EQUAL_EACH | _SIDD_MASKED_NEGATIVE_POLARITY) != l)
+        if (_mm_cmpestri(Patterns->Value[i], l, _mm_loadu_si128((const __m128i*) k), l,
+                _SIDD_CMP_EQUAL_EACH | _SIDD_MASKED_NEGATIVE_POLARITY) != l)
             break;
 
         if (i + 1 == Patterns->Count)
@@ -84,11 +85,11 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
 
     std::vector<const byte*> results;
 
-    //C3010: 'break' : jump out of OpenMP structured block not allowed
+    // C3010: 'break' : jump out of OpenMP structured block not allowed
     for (intptr_t i = Length - 32; i >= 0; i -= 32)
     {
         auto p = Data + i;
-        auto b = _mm256_loadu_si256((const __m256i*)p);
+        auto b = _mm256_loadu_si256((const __m256i*) p);
 
         // if (_mm256_test_all_zeros(b, b) == 1)
         //     continue;
@@ -110,7 +111,7 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
         {
             for (auto j = 0; j < d.Size && j + i + f < Length; j++)
             {
-                if (Mask[j] == 'x' && (uint8_t)Signature[j] != p[j])
+                if (Mask[j] == 'x' && (uint8_t) Signature[j] != p[j])
                     break;
 
                 if (j + 1 == d.Size)
@@ -124,7 +125,7 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
             results.push_back(p);
 
         p++;
-        f = _mm_cmpestri(d.Value[0], d.Length[0], _mm_loadu_si128((const __m128i*)p), 16, _SIDD_CMP_EQUAL_ORDERED);
+        f = _mm_cmpestri(d.Value[0], d.Length[0], _mm_loadu_si128((const __m128i*) p), 16, _SIDD_CMP_EQUAL_ORDERED);
 
         if (f < 16)
             goto PossibleMatch;
@@ -137,7 +138,7 @@ void FindLargestArray(const char* Signature, const char* Mask, int Out[2])
 {
     uint32_t t1 = 0;
     uint32_t t2 = strlen(Signature);
-    uint32_t len    = strlen(Mask);
+    uint32_t len = strlen(Mask);
 
     for (auto j = t2; j < len; j++)
     {
@@ -163,26 +164,26 @@ void FindLargestArray(const char* Signature, const char* Mask, int Out[2])
 
 std::vector<const byte*> Find(const byte* Data, const uint32_t Length, const char* Signature, const char* Mask)
 {
-    int d[2] = { 0 };
+    int d[2] = {0};
     FindLargestArray(Signature, Mask, d);
 
-    const uint8_t len   = static_cast<uint8_t>(strlen(Mask));
-    const uint8_t mbeg  = static_cast<uint8_t>(d[0]);
-    const uint8_t mlen  = static_cast<uint8_t>(d[1]);
-    const uint8_t mfirst    = static_cast<uint8_t>(Signature[mbeg]);
+    const uint8_t len = static_cast<uint8_t>(strlen(Mask));
+    const uint8_t mbeg = static_cast<uint8_t>(d[0]);
+    const uint8_t mlen = static_cast<uint8_t>(d[1]);
+    const uint8_t mfirst = static_cast<uint8_t>(Signature[mbeg]);
 
-    uint8_t wildcard[UCHAR_MAX + 1] = { 0 };
+    uint8_t wildcard[UCHAR_MAX + 1] = {0};
 
     for (auto i = mbeg; i < mbeg + mlen; i++)
-        wildcard[(uint8_t)Signature[i]] = 1;
+        wildcard[(uint8_t) Signature[i]] = 1;
 
     std::vector<const byte*> results;
 
     for (int i = Length - len; i >= 0; i--)
     {
-        auto c  = Data[i];
-        auto w  = wildcard[c];
-        auto k  = 0;
+        auto c = Data[i];
+        auto w = wildcard[c];
+        auto k = 0;
 
         while (w == 0 && i > mlen)
         {
@@ -208,21 +209,21 @@ std::vector<const byte*> Find(const byte* Data, const uint32_t Length, const cha
             if (j == mbeg || Mask[j] != 'x')
                 continue;
 
-            if (Data[i - mbeg + j] != (uint8_t)Signature[j])
+            if (Data[i - mbeg + j] != (uint8_t) Signature[j])
                 break;
 
             if (j + 1 == len - 1)
-                results.push_back((uint8_t*)(Data + i - mbeg));
+                results.push_back((uint8_t*) (Data + i - mbeg));
         }
     }
 
     return results;
 }
 
-struct forza_pattern_scanner
-    : pattern_scanner
+struct forza_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
         return Find(data, length, (const char*) pattern, mask);
     }
@@ -235,10 +236,10 @@ struct forza_pattern_scanner
 
 REGISTER_PATTERN(forza_pattern_scanner);
 
-struct forza_simd_pattern_scanner
-    : pattern_scanner
+struct forza_simd_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
         return FindEx(data, length, (const char*) pattern, mask);
     }

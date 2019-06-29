@@ -2,17 +2,15 @@
 
 #include "pattern_entry.h"
 
-//based on: https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore%E2%80%93Horspool_algorithm
+// based on: https://en.wikipedia.org/wiki/Boyer%E2%80%93Moore%E2%80%93Horspool_algorithm
 
 bool matches(const byte haystack_ch, const byte needle_ch, const byte wildcard)
 {
     return needle_ch == wildcard || haystack_ch == needle_ch;
 }
 
-std::vector<const byte*>
-boyermoore_horspool_memmem(const byte* haystack, size_t hlen,
-const byte* needle, size_t nlen,
-const byte wildcard = '\0')
+std::vector<const byte*> boyermoore_horspool_memmem(
+    const byte* haystack, size_t hlen, const byte* needle, size_t nlen, const byte wildcard = '\0')
 {
     size_t bad_char_skip[UCHAR_MAX + 1]; /* Officially called: bad character shift */
 
@@ -23,16 +21,16 @@ const byte wildcard = '\0')
     /* ---- Preprocess ---- */
     /* Initialize the table to default value */
     /* When a character is encountered that does not occur
-    * in the needle, we can safely skip ahead for the whole
-    * length of the needle.
-    */
+     * in the needle, we can safely skip ahead for the whole
+     * length of the needle.
+     */
     for (size_t scan = 0; scan <= UCHAR_MAX; scan = scan + 1)
     {
         bad_char_skip[scan] = nlen;
     }
 
     /* C arrays have the first byte at [0], therefore:
-    * [nlen - 1] is the last byte of the array. */
+     * [nlen - 1] is the last byte of the array. */
     size_t last = nlen - 1;
 
     /* Then populate it with the analysis of the needle */
@@ -73,10 +71,10 @@ const byte wildcard = '\0')
     return results;
 }
 
-struct mrexodia_pattern_scanner
-    : pattern_scanner
+struct mrexodia_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
         return boyermoore_horspool_memmem(data, length, pattern, strlen(mask), 0);
     }

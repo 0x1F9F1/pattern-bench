@@ -23,18 +23,17 @@
 
 #include <mem/boyer_moore_scanner.h>
 
-struct mem_boyer_moore_pattern_scanner
-    : pattern_scanner
+struct mem_boyer_moore_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* bytes, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* bytes, const char* mask, const byte* data, size_t length) const override
     {
         mem::pattern pattern(bytes, mask);
         mem::boyer_moore_scanner scanner(pattern);
 
         std::vector<const byte*> results;
 
-        scanner({ data, length }, [&] (mem::pointer result)
-        {
+        scanner({data, length}, [&](mem::pointer result) {
             results.push_back(result.as<const byte*>());
 
             return false;
@@ -53,18 +52,17 @@ REGISTER_PATTERN(mem_boyer_moore_pattern_scanner);
 
 #include <mem/simd_scanner.h>
 
-struct mem_simd_pattern_scanner
-    : pattern_scanner
+struct mem_simd_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* bytes, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* bytes, const char* mask, const byte* data, size_t length) const override
     {
         mem::pattern pattern(bytes, mask);
         mem::simd_scanner scanner(pattern);
 
         std::vector<const byte*> results;
 
-        scanner({ data, length }, [&] (mem::pointer result)
-        {
+        scanner({data, length}, [&](mem::pointer result) {
             results.push_back(result.as<const byte*>());
 
             return false;

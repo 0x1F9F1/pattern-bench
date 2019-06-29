@@ -19,10 +19,10 @@
 
 #include "pattern_entry.h"
 
-struct simple_pattern_scanner
-    : pattern_scanner
+struct simple_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
         return FindPatternSimple(data, length, pattern, mask);
     }

@@ -7,17 +7,17 @@
 
 #include <algorithm>
 
-struct cfx_pattern_scanner
-    : pattern_scanner
+struct cfx_pattern_scanner : pattern_scanner
 {
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
         size_t mask_size = strlen(mask);
         ptrdiff_t last[256];
 
         const char* findWild = strrchr(mask, '?');
 
-        std::fill(std::begin(last), std::end(last), findWild ? (findWild - mask) : - 1);
+        std::fill(std::begin(last), std::end(last), findWild ? (findWild - mask) : -1);
 
         for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(mask_size); ++i)
         {
@@ -29,11 +29,12 @@ struct cfx_pattern_scanner
 
         std::vector<const byte*> results;
 
-        for (const byte* i = data, *end = data + length - mask_size; i <= end;)
+        for (const byte *i = data, *end = data + length - mask_size; i <= end;)
         {
             ptrdiff_t j = mask_size - 1;
 
-            while ((j >= 0) && (mask[j] == '?' || pattern[j] == i[j])) j--;
+            while ((j >= 0) && (mask[j] == '?' || pattern[j] == i[j]))
+                j--;
 
             if (j < 0)
             {
@@ -43,7 +44,7 @@ struct cfx_pattern_scanner
             }
             else
             {
-                i += std::max((ptrdiff_t)1, j - last[i[j]]);
+                i += std::max((ptrdiff_t) 1, j - last[i[j]]);
             }
         }
 

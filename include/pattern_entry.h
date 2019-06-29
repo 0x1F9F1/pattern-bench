@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include <mem/mem.h>
 #include <mem/init_function.h>
+#include <mem/mem.h>
 
 #include <memory>
 #include <vector>
@@ -34,13 +34,18 @@ struct pattern_scanner
 
     virtual ~pattern_scanner() = default;
 
-    virtual std::vector<const byte*> Scan(const byte* pattern, const char* mask, const byte* data, size_t length) const = 0;
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const = 0;
     virtual const char* GetName() const = 0;
 };
 
 extern std::vector<std::unique_ptr<pattern_scanner>> PATTERN_SCANNERS;
 
-#define REGISTER_PATTERN__(CLASS, LINE) static mem::init_function DO_REGISTER_PATTERN_##LINE {[ ] { PATTERN_SCANNERS.emplace_back(new CLASS()); }}
+#define REGISTER_PATTERN__(CLASS, LINE)                    \
+    static mem::init_function DO_REGISTER_PATTERN_##LINE   \
+    {                                                      \
+        [] { PATTERN_SCANNERS.emplace_back(new CLASS()); } \
+    }
 #define REGISTER_PATTERN_(CLASS, LINE) REGISTER_PATTERN__(CLASS, LINE)
 #define REGISTER_PATTERN(CLASS) REGISTER_PATTERN_(CLASS, __LINE__)
 
