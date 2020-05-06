@@ -22,6 +22,7 @@ add_executable(${PROJECT_NAME}
     patterns/forza.cpp
     patterns/mrexodia.cpp
     patterns/darth_ton.cpp
+    patterns/std_regex.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
