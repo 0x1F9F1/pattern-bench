@@ -441,28 +441,34 @@ int main(int argc, char** argv)
 
     const uint64_t total_scan_length = static_cast<uint64_t>(reg.full_size()) * test_count;
 
+    double best_perf = 0.0f;
+
     for (size_t i = 0; i < PATTERN_SCANNERS.size(); ++i)
     {
         const auto& pattern = *PATTERN_SCANNERS[i];
 
         fmt::print("{:<32} | ", pattern.GetName());
 
-        if (skip_fails)
+        double cycles_per_byte = double(pattern.Elapsed) / total_scan_length;
+
+        if (i == 0)
+            best_perf = cycles_per_byte;
+
+        double normalized_perf = cycles_per_byte / best_perf;
+
+        if (skip_fails && pattern.Failed)
         {
-            if (pattern.Failed)
-            {
-                fmt::print("failed");
-            }
-            else
-            {
-                fmt::print("{:>12} cycles = {:>6.3f} cycles/byte", pattern.Elapsed,
-                    double(pattern.Elapsed) / total_scan_length);
-            }
+            fmt::print("failed");
         }
         else
         {
-            fmt::print("{:>12} cycles = {:>6.3f} cycles/byte | {} failed", pattern.Elapsed,
-                double(pattern.Elapsed) / total_scan_length, pattern.Failed);
+            fmt::print(
+                "{:>12} cycles = {:>6.3f} cycles/byte | {:>5.2f}x", pattern.Elapsed, cycles_per_byte, normalized_perf);
+
+            if (!skip_fails)
+            {
+                fmt::print(" | {} failed", pattern.Failed);
+            }
         }
 
         fmt::print("\n");
