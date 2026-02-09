@@ -22,6 +22,13 @@ add_executable(${PROJECT_NAME}
     patterns/forza.cpp
     patterns/mrexodia.cpp
     patterns/darth_ton.cpp
+    patterns/lightning_scanner.cpp
+    patterns/tbs.cpp
+    patterns/sig.cpp
+    patterns/libhat.cpp
+    patterns/peribunt.cpp
+    patterns/x64dbg.cpp
+    patterns/x64dbg_bmh.cpp
     patterns/std_regex.cpp
 )
 
