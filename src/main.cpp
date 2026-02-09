@@ -366,6 +366,7 @@ int main(int argc, char** argv)
 
     const size_t test_count = cmd_test_count.get_or<size_t>(256);
     const bool skip_fails = !cmd_full_scan.get<bool>();
+    const size_t progress_step = (test_count >= 20) ? (test_count / 20) : 1;
 
     const size_t test_index = cmd_test_index.get_or<size_t>(SIZE_MAX);
 
@@ -381,10 +382,14 @@ int main(int argc, char** argv)
         if (test_index != SIZE_MAX && i != test_index)
             continue;
 
-        if (LOG_LEVEL > 0)
+        if (LOG_LEVEL > 0 && test_index == SIZE_MAX)
         {
-            if (!(i % 25))
-                fmt::print("{}/{}...\n", i, test_count);
+            if (!(i % progress_step) || (i + 1 == test_count))
+                fmt::print("Benchmark progress: {}/{}\n", i + 1, test_count);
+        }
+        else if (LOG_LEVEL > 0 && test_index != SIZE_MAX && i == test_index)
+        {
+            fmt::print("Benchmark progress: running selected test {}/{}\n", i + 1, test_count);
         }
 
         for (auto& pattern : PATTERN_SCANNERS)
