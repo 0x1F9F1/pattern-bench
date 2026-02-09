@@ -366,6 +366,21 @@ static bool run_scanner_smoke_tests(size_t fuzz_cases)
         {0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x58, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x59},
         {0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x59}, "xxxxxxxxx"));
     cases.push_back(make_case("scanner_single_byte", {0x01, 0x02, 0x01, 0x01}, {0x01}, "x"));
+    {
+        scanner_smoke_case long_sparse_exact;
+        long_sparse_exact.name = "scanner_long_sparse_exact_pairless";
+        long_sparse_exact.data.assign(2048, static_cast<byte>(0x11));
+        long_sparse_exact.pattern = {0x00, 0x00, 0xBE, 0x00, 0xD9};
+        long_sparse_exact.mask = "??x?x";
+
+        for (size_t base = 0; (base + long_sparse_exact.pattern.size()) <= long_sparse_exact.data.size(); base += 64)
+        {
+            long_sparse_exact.data[base + 2] = 0xBE;
+            long_sparse_exact.data[base + 4] = 0xD9;
+        }
+
+        cases.push_back(long_sparse_exact);
+    }
 
     const size_t total_cases = cases.size() + fuzz_cases;
     size_t completed_cases = 0;

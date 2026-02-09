@@ -10,6 +10,21 @@
 
 namespace pattern16_impl
 {
+static bool has_adjacent_exact_bytes(const char* mask)
+{
+    const size_t length = std::strlen(mask);
+    if (length < 2)
+        return false;
+
+    for (size_t i = 0; (i + 1) < length; ++i)
+    {
+        if (mask[i] == 'x' && mask[i + 1] == 'x')
+            return true;
+    }
+
+    return false;
+}
+
 static inline char hex_nibble(unsigned int value)
 {
     return static_cast<char>((value < 10u) ? ('0' + value) : ('A' + (value - 10u)));
@@ -49,6 +64,11 @@ static std::vector<const byte*> find_all(const byte* data, size_t length, const 
     const size_t pattern_length = std::strlen(mask);
     if (pattern_length == 0 || pattern_length > length)
         return results;
+
+    // Pattern16 can miss valid matches in long regions when no adjacent exact-byte pair exists.
+    // Fall back to the reference scanner for this pattern class to keep correctness.
+    if (!has_adjacent_exact_bytes(mask))
+        return FindPatternSimple(data, length, pattern, mask);
 
     std::string signature = to_signature_string(pattern, mask);
     Pattern16::Impl::SplitSignatureU8 parsed = Pattern16::Impl::processSignatureString(signature);
