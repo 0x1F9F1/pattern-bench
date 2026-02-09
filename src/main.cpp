@@ -18,10 +18,13 @@
 */
 
 #include <cassert>
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <random>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 #include <mem/mem.h>
 #include <mem/pattern.h>
@@ -63,6 +66,247 @@ mem::byte_buffer read_file(const char* path)
     }
 
     return result;
+}
+
+struct smoke_stats
+{
+    size_t passed {0};
+    size_t failed {0};
+};
+
+static bool smoke_expect(smoke_stats& stats, bool condition, const char* name)
+{
+    if (condition)
+    {
+        ++stats.passed;
+        return true;
+    }
+
+    ++stats.failed;
+    if (LOG_LEVEL > 0)
+        fmt::print("Smoke failed: {}\n", name);
+    return false;
+}
+
+struct scanner_smoke_case
+{
+    std::string name;
+    std::vector<byte> data;
+    std::vector<byte> pattern;
+    std::string mask;
+};
+
+static void print_offsets(const char* label, const std::unordered_set<size_t>& values)
+{
+    std::vector<size_t> sorted(values.begin(), values.end());
+    std::sort(sorted.begin(), sorted.end());
+
+    fmt::print("{}:", label);
+    if (sorted.empty())
+    {
+        fmt::print(" <none>\n");
+        return;
+    }
+
+    for (size_t v : sorted)
+        fmt::print(" 0x{:X}", v);
+    fmt::print("\n");
+}
+
+static std::unordered_set<size_t> to_offsets(
+    const std::vector<const byte*>& results, const byte* base, size_t length, bool& in_range)
+{
+    std::unordered_set<size_t> out;
+    in_range = true;
+
+    for (const byte* result : results)
+    {
+        if (result < base || result >= (base + length))
+        {
+            in_range = false;
+            continue;
+        }
+
+        out.emplace(static_cast<size_t>(result - base));
+    }
+
+    return out;
+}
+
+static bool run_scanner_case(
+    smoke_stats& stats, mem::execution_handler& handler, const scanner_smoke_case& test_case)
+{
+    bool ok = true;
+
+    const auto expected_raw = FindPatternSimple(
+        test_case.data.data(), test_case.data.size(), test_case.pattern.data(), test_case.mask.c_str());
+
+    bool expected_in_range = true;
+    const auto expected = to_offsets(expected_raw, test_case.data.data(), test_case.data.size(), expected_in_range);
+    ok &= smoke_expect(stats, expected_in_range, test_case.name.c_str());
+
+    for (const auto& scanner : PATTERN_SCANNERS)
+    {
+        bool scanner_ok = true;
+        bool got_in_range = true;
+        std::unordered_set<size_t> got;
+        const char* exception_text = nullptr;
+
+        try
+        {
+            const auto results = handler.execute([&] {
+                return scanner->Scan(
+                    test_case.pattern.data(), test_case.mask.c_str(), test_case.data.data(), test_case.data.size());
+            });
+
+            got = to_offsets(results, test_case.data.data(), test_case.data.size(), got_in_range);
+
+            if (!got_in_range || got.size() != expected.size())
+            {
+                scanner_ok = false;
+            }
+            else
+            {
+                for (const size_t v : expected)
+                {
+                    if (got.find(v) == got.end())
+                    {
+                        scanner_ok = false;
+                        break;
+                    }
+                }
+            }
+        }
+        catch (...)
+        {
+            scanner_ok = false;
+            exception_text = "exception";
+        }
+
+        if (!scanner_ok && LOG_LEVEL > 0)
+        {
+            fmt::print("Scanner smoke failed: {} / {}\n", scanner->GetName(), test_case.name);
+            if (!got_in_range)
+                fmt::print("Result contained out-of-range pointer(s)\n");
+            if (exception_text)
+                fmt::print("Failure reason: {}\n", exception_text);
+
+            fmt::print("Mask: {}\n", test_case.mask);
+            fmt::print("Pattern: {}\n", mem::as_hex({test_case.pattern.data(), test_case.pattern.size()}));
+            fmt::print("Buffer: {}\n", mem::as_hex({test_case.data.data(), test_case.data.size()}));
+            print_offsets("Expected", expected);
+            print_offsets("Got", got);
+        }
+
+        ok &= smoke_expect(stats, scanner_ok, test_case.name.c_str());
+    }
+
+    return ok;
+}
+
+static scanner_smoke_case make_case(
+    const char* name, const std::initializer_list<byte>& data, const std::initializer_list<byte>& pattern, const char* mask)
+{
+    scanner_smoke_case out;
+    out.name = name;
+    out.data.assign(data.begin(), data.end());
+    out.pattern.assign(pattern.begin(), pattern.end());
+    out.mask = mask;
+    return out;
+}
+
+static bool run_scanner_smoke_tests(size_t fuzz_cases)
+{
+    smoke_stats stats;
+    mem::execution_handler handler;
+
+    std::vector<scanner_smoke_case> cases;
+    cases.push_back(make_case("scanner_exact_one", {0xAA, 0xBB, 0xCC, 0xDD}, {0xBB, 0xCC}, "xx"));
+    cases.push_back(make_case("scanner_overlap", {0xAB, 0xAB, 0xAB, 0xAB, 0xAB}, {0xAB, 0xAB, 0xAB}, "xxx"));
+    cases.push_back(make_case("scanner_leading_wildcard", {0x11, 0x22, 0x33, 0x44, 0x22, 0x33}, {0x00, 0x22, 0x33}, "?xx"));
+    cases.push_back(make_case("scanner_trailing_wildcard", {0x10, 0x20, 0x30, 0x10, 0x20, 0x40}, {0x10, 0x20, 0x00}, "xx?"));
+    cases.push_back(make_case("scanner_middle_wildcard", {0x55, 0xAA, 0x66, 0x55, 0xBB, 0x66}, {0x55, 0x00, 0x66}, "x?x"));
+    cases.push_back(make_case("scanner_literal_zero", {0x11, 0x00, 0x22, 0x11, 0xFF, 0x22, 0x11, 0x00, 0x22}, {0x11, 0x00, 0x22}, "xxx"));
+    cases.push_back(make_case("scanner_start_end", {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0xDE, 0xAD, 0xBE, 0xEF}, {0xDE, 0xAD, 0xBE, 0xEF}, "xxxx"));
+    cases.push_back(make_case("scanner_bmh_prefix_trap",
+        {0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x58, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x59},
+        {0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x59}, "xxxxxxxxx"));
+    cases.push_back(make_case("scanner_single_byte", {0x01, 0x02, 0x01, 0x01}, {0x01}, "x"));
+
+    const size_t total_cases = cases.size() + fuzz_cases;
+    size_t completed_cases = 0;
+
+    for (const auto& test_case : cases)
+    {
+        run_scanner_case(stats, handler, test_case);
+        ++completed_cases;
+    }
+
+    std::mt19937 rng(0xC0DEFACEu);
+    std::uniform_int_distribution<size_t> data_len_dist(64, 512);
+    std::uniform_int_distribution<size_t> pat_len_dist(3, 32);
+    std::uniform_int_distribution<uint32_t> byte_dist(0, 0xFF);
+    std::bernoulli_distribution wildcard_dist(0.2);
+    std::uniform_int_distribution<size_t> inject_count_dist(0, 4);
+
+    for (size_t i = 0; i < fuzz_cases; ++i)
+    {
+        scanner_smoke_case fuzz;
+        fuzz.name = fmt::format("scanner_fuzz_{}", i);
+
+        const size_t data_len = data_len_dist(rng);
+        fuzz.data.resize(data_len);
+        std::generate(fuzz.data.begin(), fuzz.data.end(), [&] { return static_cast<byte>(byte_dist(rng)); });
+
+        size_t pat_len = pat_len_dist(rng);
+        pat_len = (std::min)(pat_len, data_len);
+        fuzz.pattern.resize(pat_len);
+        fuzz.mask.resize(pat_len);
+
+        bool any_solid = false;
+        for (size_t j = 0; j < pat_len; ++j)
+        {
+            fuzz.pattern[j] = static_cast<byte>(byte_dist(rng));
+            if (wildcard_dist(rng))
+            {
+                fuzz.mask[j] = '?';
+                fuzz.pattern[j] = 0x00;
+            }
+            else
+            {
+                fuzz.mask[j] = 'x';
+                any_solid = true;
+            }
+        }
+
+        if (!any_solid)
+        {
+            size_t force = rng() % pat_len;
+            fuzz.mask[force] = 'x';
+            fuzz.pattern[force] = static_cast<byte>(byte_dist(rng));
+        }
+
+        if (data_len >= pat_len)
+        {
+            std::uniform_int_distribution<size_t> offset_dist(0, data_len - pat_len);
+            const size_t inject_count = inject_count_dist(rng);
+            for (size_t k = 0; k < inject_count; ++k)
+            {
+                const size_t off = offset_dist(rng);
+                for (size_t j = 0; j < pat_len; ++j)
+                {
+                    if (fuzz.mask[j] == 'x')
+                        fuzz.data[off + j] = fuzz.pattern[j];
+                }
+            }
+        }
+
+        run_scanner_case(stats, handler, fuzz);
+        ++completed_cases;
+    }
+
+    fmt::print("Scanner smoke tests: {} passed, {} failed\n", stats.passed, stats.failed);
+    return stats.failed == 0;
 }
 
 struct scan_bench
@@ -291,6 +535,9 @@ static mem::cmd_param cmd_log_level {"loglevel"};
 static mem::cmd_param cmd_full_scan {"full"};
 static mem::cmd_param cmd_filter {"filter"};
 static mem::cmd_param cmd_test_index {"test"};
+static mem::cmd_param cmd_skip_smoke {"skip_smoke"};
+static mem::cmd_param cmd_smoke_only {"smoke_only"};
+static mem::cmd_param cmd_smoke_fuzz {"smoke_fuzz"};
 
 int main(int argc, char** argv)
 {
@@ -302,6 +549,23 @@ int main(int argc, char** argv)
     mem::cmd_param::init(argc, argv);
 
     LOG_LEVEL = cmd_log_level.get_or<size_t>(0);
+
+    if (!cmd_skip_smoke.get<bool>())
+    {
+        const size_t smoke_fuzz_cases = cmd_smoke_fuzz.get_or<size_t>(32);
+
+        if (!run_scanner_smoke_tests(smoke_fuzz_cases))
+        {
+            fmt::print("Smoke test failed. Use --skip_smoke to bypass.\n");
+            return 2;
+        }
+    }
+
+    if (cmd_smoke_only.get<bool>())
+    {
+        fmt::print("Smoke-only mode complete.\n");
+        return 0;
+    }
 
     const char* filter = cmd_filter.get();
 
