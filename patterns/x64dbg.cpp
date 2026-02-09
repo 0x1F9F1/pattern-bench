@@ -2,60 +2,68 @@
 
 #include "pattern_entry.h"
 
-#include <algorithm>
 #include <cstring>
-#include <string>
 #include <vector>
 
 namespace x64dbg_impl
 {
-struct PatternNibble
-{
-    unsigned char data = 0;
-    bool wildcard = false;
-};
-
 struct PatternByte
 {
-    PatternNibble nibble[2];
+    // Nibble-aware mask/value encoding:
+    // ((byte ^ value) & mask) == 0 means match.
+    // mask bit = 1 enforces compare, 0 ignores wildcard nibble.
+    unsigned char value = 0;
+    unsigned char mask = 0;
 };
 
 static inline bool patternmatchbyte(unsigned char byte, const PatternByte& pbyte)
 {
-    int matched = 0;
-
-    unsigned char n1 = (byte >> 4) & 0xF;
-    if (pbyte.nibble[0].wildcard)
-        matched++;
-    else if (pbyte.nibble[0].data == n1)
-        matched++;
-
-    unsigned char n2 = byte & 0xF;
-    if (pbyte.nibble[1].wildcard)
-        matched++;
-    else if (pbyte.nibble[1].data == n2)
-        matched++;
-
-    return (matched == 2);
+    return (((byte ^ pbyte.value) & pbyte.mask) == 0);
 }
 
 size_t patternfind(const unsigned char* data, size_t datasize, const std::vector<PatternByte>& pattern)
 {
-    size_t searchpatternsize = pattern.size();
-    for (size_t i = 0, pos = 0; i < datasize; i++)
+    const size_t searchpatternsize = pattern.size();
+    if (searchpatternsize == 0 || datasize < searchpatternsize)
+        return static_cast<size_t>(-1);
+
+    const PatternByte* pat = pattern.data();
+    const size_t last_start = datasize - searchpatternsize;
+
+    // Use the first fully-specified byte as a cheap prefilter.
+    size_t anchor = 0;
+    while (anchor < searchpatternsize && pat[anchor].mask != 0xFF)
+        ++anchor;
+
+    if (anchor == searchpatternsize)
     {
-        if (patternmatchbyte(data[i], pattern.at(pos)))
-        {
-            pos++;
-            if (pos == searchpatternsize)
-                return i - searchpatternsize + 1;
-        }
-        else if (pos > 0)
-        {
-            i -= pos;
-            pos = 0;
-        }
+        // All bytes are wildcard: first valid hit is the start.
+        return 0;
     }
+
+    const unsigned char anchor_value = pat[anchor].value;
+    size_t pos = 0;
+    while (pos <= last_start)
+    {
+        while (pos <= last_start && data[pos + anchor] != anchor_value)
+            ++pos;
+
+        if (pos > last_start)
+            break;
+
+        size_t i = 0;
+        for (; i < searchpatternsize; ++i)
+        {
+            if (!patternmatchbyte(data[pos + i], pat[i]))
+                break;
+        }
+
+        if (i == searchpatternsize)
+            return pos;
+
+        ++pos;
+    }
+
     return static_cast<size_t>(-1);
 }
 
@@ -68,15 +76,13 @@ static std::vector<PatternByte> to_pattern_bytes(const byte* pattern, const char
     {
         if (mask[i] == '?')
         {
-            out[i].nibble[0].wildcard = true;
-            out[i].nibble[1].wildcard = true;
+            out[i].value = 0;
+            out[i].mask = 0x00;
         }
         else
         {
-            out[i].nibble[0].wildcard = false;
-            out[i].nibble[0].data = (pattern[i] >> 4) & 0xF;
-            out[i].nibble[1].wildcard = false;
-            out[i].nibble[1].data = pattern[i] & 0xF;
+            out[i].value = pattern[i];
+            out[i].mask = 0xFF;
         }
     }
 
