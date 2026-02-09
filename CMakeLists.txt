@@ -31,6 +31,7 @@ add_executable(${PROJECT_NAME}
     patterns/x64dbg_bmh.cpp
     patterns/std_regex.cpp
     patterns/pattern16.cpp
+    patterns/legacy_extras.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
