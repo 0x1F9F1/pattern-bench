@@ -3,6 +3,45 @@
 #include "pattern_entry.h"
 
 #include <immintrin.h>
+#include <algorithm>
+#include <cstring>
+
+static std::vector<const byte*> find_masked(const byte* data, size_t length, const byte* pattern, const char* mask)
+{
+    const size_t pattern_length = std::strlen(mask);
+    if (pattern_length == 0 || pattern_length > length)
+        return {};
+
+    ptrdiff_t last[UCHAR_MAX + 1];
+    const char* wild = std::strrchr(mask, '?');
+    std::fill(std::begin(last), std::end(last), wild ? (wild - mask) : -1);
+
+    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(pattern_length); ++i)
+    {
+        if (mask[i] == 'x' && last[pattern[i]] < i)
+            last[pattern[i]] = i;
+    }
+
+    std::vector<const byte*> results;
+    for (const byte *cursor = data, *end = data + (length - pattern_length); cursor <= end;)
+    {
+        ptrdiff_t i = static_cast<ptrdiff_t>(pattern_length) - 1;
+        while (i >= 0 && (mask[i] == '?' || pattern[i] == cursor[i]))
+            --i;
+
+        if (i < 0)
+        {
+            results.push_back(cursor);
+            ++cursor;
+        }
+        else
+        {
+            cursor += std::max<ptrdiff_t>(1, i - last[cursor[i]]);
+        }
+    }
+
+    return results;
+}
 
 struct PatternData
 {
@@ -164,60 +203,7 @@ void FindLargestArray(const char* Signature, const char* Mask, int Out[2])
 
 std::vector<const byte*> Find(const byte* Data, const uint32_t Length, const char* Signature, const char* Mask)
 {
-    int d[2] = {0};
-    FindLargestArray(Signature, Mask, d);
-
-    const uint8_t len = static_cast<uint8_t>(strlen(Mask));
-    const uint8_t mbeg = static_cast<uint8_t>(d[0]);
-    const uint8_t mlen = static_cast<uint8_t>(d[1]);
-    const uint8_t mfirst = static_cast<uint8_t>(Signature[mbeg]);
-
-    uint8_t wildcard[UCHAR_MAX + 1] = {0};
-
-    for (auto i = mbeg; i < mbeg + mlen; i++)
-        wildcard[(uint8_t) Signature[i]] = 1;
-
-    std::vector<const byte*> results;
-
-    for (int i = Length - len; i >= 0; i--)
-    {
-        auto c = Data[i];
-        auto w = wildcard[c];
-        auto k = 0;
-
-        while (w == 0 && i > mlen)
-        {
-            i -= mlen;
-            w = wildcard[Data[i]];
-            k = 1;
-        }
-
-        if (k == 1)
-        {
-            i++;
-            continue;
-        }
-
-        if (c != mfirst)
-            continue;
-
-        if (i - mbeg < 0 || i - mbeg + len > Length)
-            break;
-
-        for (auto j = 0; j < len - 1; j++)
-        {
-            if (j == mbeg || Mask[j] != 'x')
-                continue;
-
-            if (Data[i - mbeg + j] != (uint8_t) Signature[j])
-                break;
-
-            if (j + 1 == len - 1)
-                results.push_back((uint8_t*) (Data + i - mbeg));
-        }
-    }
-
-    return results;
+    return find_masked(Data, Length, reinterpret_cast<const byte*>(Signature), Mask);
 }
 
 struct forza_pattern_scanner : pattern_scanner
