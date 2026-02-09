@@ -19,7 +19,9 @@
 
 #include <cassert>
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <random>
 #include <string>
@@ -47,6 +49,41 @@
 #include "pattern_entry.h"
 
 static size_t LOG_LEVEL = 0;
+static bool PATHOLOGICAL_MODE = false;
+static std::string PATHOLOGICAL_CASE {"freq_anchor_near_miss"};
+
+static const std::array<const char*, 8> PATHOLOGICAL_CASES {{
+    "freq_anchor_near_miss",
+    "bmh_shift1_periodic",
+    "last_byte_flood",
+    "high_overlap_matches",
+    "wildcard_sparse_exact",
+    "alternating_anchor_noise",
+    "short_pattern_stress",
+    "boundary_alignment",
+}};
+
+static bool has_pathological_case(const std::string& name)
+{
+    if (name == "all")
+        return true;
+
+    for (const char* candidate : PATHOLOGICAL_CASES)
+    {
+        if (name == candidate)
+            return true;
+    }
+
+    return false;
+}
+
+static const char* resolve_pathological_case(const std::string& name, size_t iteration)
+{
+    if (name == "all")
+        return PATHOLOGICAL_CASES[iteration % PATHOLOGICAL_CASES.size()];
+
+    return name.c_str();
+}
 
 using mem::byte;
 
@@ -327,6 +364,7 @@ private:
     std::vector<byte> pattern_;
     std::string masks_;
     std::unordered_set<size_t> expected_;
+    size_t pathological_iteration_ {0};
 
 public:
     scan_bench(uint32_t seed)
@@ -427,6 +465,202 @@ public:
 
     void generate()
     {
+        if (PATHOLOGICAL_MODE)
+        {
+            std::uniform_int_distribution<size_t> size_dist(0, 100);
+            const size_t variation = size_dist(rng_);
+            const size_t case_iteration = pathological_iteration_++;
+            const char* pathological_case = resolve_pathological_case(PATHOLOGICAL_CASE, case_iteration);
+
+            data_ = full_data_ + variation;
+            size_ = full_size_ - variation;
+
+            if (std::strcmp(pathological_case, "freq_anchor_near_miss") == 0)
+            {
+                // Degenerate case for frequency-anchor scanners:
+                // every position looks like a "near hit" that only fails late.
+                const byte anchor = 0x9A; // rank 0 in mem::simd_scanner default frequency table
+                const size_t pattern_length = 32;
+                const size_t mismatch_pos = 1;
+
+                std::fill_n(data_, size_, anchor);
+
+                pattern_.assign(pattern_length, anchor);
+                masks_.assign(pattern_length, 'x');
+
+                // Make pattern impossible in the all-anchor buffer while still matching
+                // almost every byte position except this early check.
+                pattern_[mismatch_pos] = static_cast<byte>(anchor ^ 0xFF);
+            }
+            else if (std::strcmp(pathological_case, "bmh_shift1_periodic") == 0)
+            {
+                const byte a = 0x41;
+                const byte b = 0x42;
+                const byte c = 0x43;
+                std::fill_n(data_, size_, 0x00);
+                for (size_t i = 0; i < size_; ++i)
+                    data_[i] = (i & 1) ? b : a;
+
+                pattern_ = {a, b, a, b, a, b, a, b, a, b, a, c};
+                masks_.assign(pattern_.size(), 'x');
+            }
+            else if (std::strcmp(pathological_case, "last_byte_flood") == 0)
+            {
+                const byte tail = 0xE7;
+                pattern_.resize(24);
+                masks_.assign(pattern_.size(), 'x');
+
+                for (size_t i = 0; i < (pattern_.size() - 1); ++i)
+                    pattern_[i] = static_cast<byte>(0x11 + (i * 7));
+                pattern_.back() = tail;
+
+                std::fill_n(data_, size_, tail);
+            }
+            else if (std::strcmp(pathological_case, "high_overlap_matches") == 0)
+            {
+                const byte repeated = 0xAA;
+                pattern_ = {repeated, repeated, repeated, repeated, repeated, repeated};
+                masks_.assign(pattern_.size(), 'x');
+
+                std::fill_n(data_, size_, static_cast<byte>(0x5A));
+                for (size_t base = 0; (base + 8) <= size_; base += 128)
+                {
+                    std::fill_n(data_ + base, 8, repeated);
+                }
+            }
+            else if (std::strcmp(pathological_case, "wildcard_sparse_exact") == 0)
+            {
+                const size_t len = 32;
+                pattern_.assign(len, 0x00);
+                masks_.assign(len, '?');
+
+                pattern_[0] = 0xDE;
+                pattern_[15] = 0xAD;
+                pattern_[31] = 0xBE;
+                masks_[0] = 'x';
+                masks_[15] = 'x';
+                masks_[31] = 'x';
+
+                std::fill_n(data_, size_, static_cast<byte>(0x00));
+                for (size_t base = 0; (base + len) <= size_; base += len)
+                {
+                    data_[base + 0] = 0xDE;
+                    data_[base + 15] = 0xAD;
+                    data_[base + 31] = 0xBF; // near-hit, fail on final exact byte
+                }
+            }
+            else if (std::strcmp(pathological_case, "alternating_anchor_noise") == 0)
+            {
+                const byte anchor = 0x9A;
+                pattern_.assign(24, anchor);
+                masks_.assign(pattern_.size(), 'x');
+                pattern_[12] = 0x77;
+
+                for (size_t i = 0; i < size_; ++i)
+                {
+                    const bool anchor_block = ((i / 64) & 1) == 0;
+                    data_[i] = anchor_block ? anchor : static_cast<byte>(0x10);
+                }
+            }
+            else if (std::strcmp(pathological_case, "short_pattern_stress") == 0)
+            {
+                const size_t len = 1 + (case_iteration % 4);
+                const byte p0 = 0xA5;
+                const byte p1 = 0x5A;
+                const byte p2 = 0xC3;
+                const byte p3 = 0x3C;
+
+                pattern_.assign(len, 0x00);
+                masks_.assign(len, 'x');
+                pattern_[0] = p0;
+                if (len >= 2)
+                    pattern_[1] = p1;
+                if (len >= 3)
+                    pattern_[2] = p2;
+                if (len >= 4)
+                    pattern_[3] = p3;
+
+                if (len == 3)
+                {
+                    masks_[1] = '?';
+                    pattern_[1] = 0x00;
+                }
+                else if (len == 4)
+                {
+                    masks_[2] = '?';
+                    pattern_[2] = 0x00;
+                }
+
+                if (len == 1)
+                {
+                    std::fill_n(data_, size_, static_cast<byte>(p0 ^ 0x01));
+                    for (size_t i = 0; i < size_; i += 128)
+                        data_[i] = p0;
+                }
+                else if (len == 2)
+                {
+                    for (size_t i = 0; i < size_; ++i)
+                        data_[i] = (i & 1) ? static_cast<byte>(0x00) : p0;
+                }
+                else if (len == 3)
+                {
+                    for (size_t i = 0; i < size_; ++i)
+                    {
+                        const size_t slot = i % 3;
+                        if (slot == 0)
+                            data_[i] = p0;
+                        else if (slot == 1)
+                            data_[i] = static_cast<byte>(0x7D);
+                        else
+                            data_[i] = static_cast<byte>(0x00);
+                    }
+                }
+                else
+                {
+                    for (size_t i = 0; i < size_; ++i)
+                    {
+                        const size_t slot = i % 4;
+                        if (slot == 0)
+                            data_[i] = p0;
+                        else if (slot == 1)
+                            data_[i] = p1;
+                        else if (slot == 2)
+                            data_[i] = static_cast<byte>(0x7D);
+                        else
+                            data_[i] = static_cast<byte>(0x00);
+                    }
+                }
+            }
+            else if (std::strcmp(pathological_case, "boundary_alignment") == 0)
+            {
+                const size_t len = 32;
+                pattern_.resize(len);
+                masks_.assign(len, 'x');
+                for (size_t i = 0; i < len; ++i)
+                    pattern_[i] = static_cast<byte>(0x40 + i);
+
+                std::fill_n(data_, size_, static_cast<byte>(0xEE));
+
+                const size_t block = 64;
+                const size_t starts[2] = {15, 31};
+                for (size_t base = 0; base < size_; base += block)
+                {
+                    for (size_t k = 0; k < 2; ++k)
+                    {
+                        const size_t off = base + starts[k];
+                        if ((off + len) > size_)
+                            continue;
+
+                        std::memcpy(data_ + off, pattern_.data(), len);
+                        data_[off + len - 1] ^= 0x01; // late mismatch at boundary-heavy offsets
+                    }
+                }
+            }
+
+            expected_ = shift_results(FindPatternSimple(data(), size(), pattern(), masks()));
+            return;
+        }
+
         std::uniform_int_distribution<size_t> size_dist(0, 100);
 
         size_t variation = size_dist(rng_);
@@ -538,6 +772,8 @@ static mem::cmd_param cmd_test_index {"test"};
 static mem::cmd_param cmd_skip_smoke {"skip_smoke"};
 static mem::cmd_param cmd_smoke_only {"smoke_only"};
 static mem::cmd_param cmd_smoke_fuzz {"smoke_fuzz"};
+static mem::cmd_param cmd_pathological {"pathological"};
+static mem::cmd_param cmd_pathological_case {"pathological_case"};
 
 int main(int argc, char** argv)
 {
@@ -549,6 +785,22 @@ int main(int argc, char** argv)
     mem::cmd_param::init(argc, argv);
 
     LOG_LEVEL = cmd_log_level.get_or<size_t>(0);
+    PATHOLOGICAL_MODE = cmd_pathological.get<bool>();
+    if (const char* pathological_case = cmd_pathological_case.get())
+    {
+        PATHOLOGICAL_CASE = pathological_case;
+        PATHOLOGICAL_MODE = true;
+    }
+
+    if (PATHOLOGICAL_MODE && !has_pathological_case(PATHOLOGICAL_CASE))
+    {
+        fmt::print("Invalid pathological case: {}\n", PATHOLOGICAL_CASE);
+        fmt::print("Available pathological cases: all");
+        for (const char* name : PATHOLOGICAL_CASES)
+            fmt::print(", {}", name);
+        fmt::print("\n");
+        return 1;
+    }
 
     if (!cmd_skip_smoke.get<bool>())
     {
@@ -634,8 +886,10 @@ int main(int argc, char** argv)
 
     const size_t test_index = cmd_test_index.get_or<size_t>(SIZE_MAX);
 
-    fmt::print("Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}\n", reg.seed(),
-        reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size());
+    fmt::print(
+        "Begin Scan: Seed: 0x{0:08X}, Size: 0x{1:X}, Tests: {2}, Skip Fails: {3}, Scanners: {4}, Pathological: {5}, Case: {6}\n",
+        reg.seed(), reg.full_size(), test_count, skip_fails, PATTERN_SCANNERS.size(), PATHOLOGICAL_MODE,
+        PATHOLOGICAL_MODE ? PATHOLOGICAL_CASE : "off");
 
     mem::execution_handler handler;
 
