@@ -30,6 +30,7 @@ add_executable(${PROJECT_NAME}
     patterns/x64dbg.cpp
     patterns/x64dbg_bmh.cpp
     patterns/std_regex.cpp
+    patterns/pattern16.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
@@ -37,7 +38,11 @@ add_subdirectory(vendor EXCLUDE_FROM_ALL)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    include)
+    include
+    vendor/pattern16/include)
+
+set_source_files_properties(patterns/pattern16.cpp PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/std:c++20>;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-std=c++20>")
 
 target_link_libraries(${PROJECT_NAME}
     mem fmt)
