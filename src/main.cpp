@@ -367,19 +367,68 @@ static bool run_scanner_smoke_tests(size_t fuzz_cases)
         {0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x41, 0x42, 0x59}, "xxxxxxxxx"));
     cases.push_back(make_case("scanner_single_byte", {0x01, 0x02, 0x01, 0x01}, {0x01}, "x"));
     {
-        scanner_smoke_case long_sparse_exact;
-        long_sparse_exact.name = "scanner_long_sparse_exact_pairless";
-        long_sparse_exact.data.assign(2048, static_cast<byte>(0x11));
-        long_sparse_exact.pattern = {0x00, 0x00, 0xBE, 0x00, 0xD9};
-        long_sparse_exact.mask = "??x?x";
+        auto make_sparse_pairless_case = [](const char* name, size_t length) {
+            scanner_smoke_case out;
+            out.name = name;
+            out.data.assign(length, static_cast<byte>(0x11));
+            out.pattern = {0x00, 0x00, 0xBE, 0x00, 0xD9};
+            out.mask = "??x?x";
+            for (size_t base = 0; (base + out.pattern.size()) <= out.data.size(); base += 64)
+            {
+                out.data[base + 2] = 0xBE;
+                out.data[base + 4] = 0xD9;
+            }
+            return out;
+        };
 
-        for (size_t base = 0; (base + long_sparse_exact.pattern.size()) <= long_sparse_exact.data.size(); base += 64)
+        // Repro sequence for sparse-mask warmup behavior seen in Pattern16:
+        // 1024-byte run is stable, then the same sparse mask on 2048 bytes can degrade.
+        cases.push_back(make_sparse_pairless_case("scanner_sparse_pairless_warmup_1024", 1024));
+        cases.push_back(make_sparse_pairless_case("scanner_sparse_pairless_warmup_2048", 2048));
+    }
+    {
+        scanner_smoke_case sparse_wrong_offset;
+        sparse_wrong_offset.name = "scanner_sparse_pairless_wrong_first_offset_repro";
+        sparse_wrong_offset.data.assign(2048, static_cast<byte>(0x11));
+        sparse_wrong_offset.pattern = {0x96, 0x00, 0x00, 0x00, 0x00};
+        sparse_wrong_offset.mask = "x????";
+
+        for (size_t base = 0; (base + sparse_wrong_offset.pattern.size()) <= sparse_wrong_offset.data.size(); base += 64)
         {
-            long_sparse_exact.data[base + 2] = 0xBE;
-            long_sparse_exact.data[base + 4] = 0xD9;
+            sparse_wrong_offset.data[base] = sparse_wrong_offset.pattern[0];
         }
 
-        cases.push_back(long_sparse_exact);
+        cases.push_back(sparse_wrong_offset);
+    }
+    {
+        scanner_smoke_case sparse_false_negative;
+        sparse_false_negative.name = "scanner_sparse_pairless_false_negative_repro";
+        sparse_false_negative.data.resize(4699);
+        sparse_false_negative.pattern = {
+            0x00, 0x00, 0xF2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x22, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x57, 0x00, 0xB8, 0x00, 0x00, 0x00,
+            0xD3, 0x00, 0x2C, 0x00, 0x4B, 0x00, 0x00, 0x00, 0x00, 0x19};
+        sparse_false_negative.mask = "??x?????x?????x?x???x?x?x????x";
+
+        for (size_t i = 0; i < sparse_false_negative.data.size(); ++i)
+        {
+            sparse_false_negative.data[i] = static_cast<byte>((i * 17u + 91u) & 0xFFu);
+        }
+
+        const size_t inject_offsets[] = {31, 440, 684, 1023, 1388, 2011, 2750, 3301, 4096};
+        for (size_t off : inject_offsets)
+        {
+            if (off + sparse_false_negative.pattern.size() > sparse_false_negative.data.size())
+                continue;
+
+            for (size_t j = 0; j < sparse_false_negative.pattern.size(); ++j)
+            {
+                if (sparse_false_negative.mask[j] == 'x')
+                    sparse_false_negative.data[off + j] = sparse_false_negative.pattern[j];
+            }
+        }
+
+        cases.push_back(sparse_false_negative);
     }
 
     const size_t total_cases = cases.size() + fuzz_cases;
