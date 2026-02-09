@@ -85,6 +85,103 @@ static const char* resolve_pathological_case(const std::string& name, size_t ite
     return name.c_str();
 }
 
+#if defined(_WIN32)
+struct core_pin_result
+{
+    bool pinned {false};
+    WORD group {0};
+    KAFFINITY mask {0};
+    BYTE efficiency_class {0xFF};
+};
+
+static KAFFINITY pick_single_logical(KAFFINITY mask)
+{
+    return mask & (~mask + 1);
+}
+
+static core_pin_result pin_thread_to_preferred_core()
+{
+    core_pin_result result;
+
+    DWORD buffer_size = 0;
+    if (GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &buffer_size) == FALSE
+        && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+    {
+        return result;
+    }
+
+    if (!buffer_size)
+        return result;
+
+    std::vector<uint8_t> buffer(buffer_size);
+    auto* info = reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data());
+    if (!GetLogicalProcessorInformationEx(RelationProcessorCore, info, &buffer_size))
+        return result;
+
+    BYTE best_efficiency = 0xFF;
+    WORD best_group = 0;
+    KAFFINITY best_mask = 0;
+
+    const uint8_t* curr = buffer.data();
+    const uint8_t* end = buffer.data() + buffer_size;
+    while (curr < end)
+    {
+        const auto* entry = reinterpret_cast<const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(curr);
+        if (entry->Relationship == RelationProcessorCore)
+        {
+            const PROCESSOR_RELATIONSHIP& proc = entry->Processor;
+            const BYTE efficiency = proc.EfficiencyClass;
+            for (WORD i = 0; i < proc.GroupCount; ++i)
+            {
+                const WORD group = proc.GroupMask[i].Group;
+                const KAFFINITY group_mask = proc.GroupMask[i].Mask;
+                if (!group_mask)
+                    continue;
+
+                const KAFFINITY logical = pick_single_logical(group_mask);
+                if (!logical)
+                    continue;
+
+                if (!best_mask || efficiency < best_efficiency
+                    || (efficiency == best_efficiency && (group < best_group || (group == best_group && logical < best_mask))))
+                {
+                    best_efficiency = efficiency;
+                    best_group = group;
+                    best_mask = logical;
+                }
+            }
+        }
+
+        curr += entry->Size;
+    }
+
+    if (!best_mask)
+        return result;
+
+    GROUP_AFFINITY affinity {};
+    affinity.Group = best_group;
+    affinity.Mask = best_mask;
+    if (!SetThreadGroupAffinity(GetCurrentThread(), &affinity, nullptr))
+    {
+        if (best_group == 0)
+        {
+            if (!SetThreadAffinityMask(GetCurrentThread(), static_cast<DWORD_PTR>(best_mask)))
+                return result;
+        }
+        else
+        {
+            return result;
+        }
+    }
+
+    result.pinned = true;
+    result.group = best_group;
+    result.mask = best_mask;
+    result.efficiency_class = best_efficiency;
+    return result;
+}
+#endif
+
 using mem::byte;
 
 mem::byte_buffer read_file(const char* path)
@@ -778,6 +875,7 @@ static mem::cmd_param cmd_pathological_case {"pathological_case"};
 int main(int argc, char** argv)
 {
 #if defined(_WIN32)
+    core_pin_result pin_result = pin_thread_to_preferred_core();
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 #endif
 
@@ -801,6 +899,22 @@ int main(int argc, char** argv)
         fmt::print("\n");
         return 1;
     }
+
+#if defined(_WIN32)
+    if (pin_result.pinned)
+    {
+        if (LOG_LEVEL > 0)
+        {
+            fmt::print(
+                "Pinned benchmark thread to group {} mask 0x{:X} (efficiency class {})\n", pin_result.group,
+                static_cast<uint64_t>(pin_result.mask), static_cast<uint32_t>(pin_result.efficiency_class));
+        }
+    }
+    else if (LOG_LEVEL > 0)
+    {
+        fmt::print("Failed to pin benchmark thread to a preferred core\n");
+    }
+#endif
 
     if (!cmd_skip_smoke.get<bool>())
     {
