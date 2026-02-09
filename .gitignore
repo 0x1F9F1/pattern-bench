@@ -20,3 +20,5 @@ bld/
 .vs/
 .vscode/
 build32/
+
+failure_logs/
