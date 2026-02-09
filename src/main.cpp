@@ -915,6 +915,7 @@ int main(int argc, char** argv)
             if (skip_fails && pattern->Failed != 0)
                 continue;
 
+            const auto start_time = std::chrono::steady_clock::now();
             uint64_t start_clock = mem::rdtsc();
 
             try
@@ -947,8 +948,11 @@ int main(int argc, char** argv)
             }
 
             uint64_t end_clock = mem::rdtsc();
+            const auto end_time = std::chrono::steady_clock::now();
 
             pattern->Elapsed += end_clock - start_clock;
+            pattern->ElapsedNs += static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count());
         }
     }
 
@@ -973,6 +977,13 @@ int main(int argc, char** argv)
         fmt::print("{:<32} | ", pattern.GetName());
 
         double cycles_per_byte = double(pattern.Elapsed) / total_scan_length;
+        double gib_per_sec = 0.0;
+        if (pattern.ElapsedNs != 0)
+        {
+            const double total_gib = double(total_scan_length) / (1024.0 * 1024.0 * 1024.0);
+            const double elapsed_sec = double(pattern.ElapsedNs) / 1000000000.0;
+            gib_per_sec = total_gib / elapsed_sec;
+        }
 
         if (i == 0)
             best_perf = cycles_per_byte;
@@ -986,7 +997,8 @@ int main(int argc, char** argv)
         else
         {
             fmt::print(
-                "{:>12} cycles = {:>6.3f} cycles/byte | {:>5.2f}x", pattern.Elapsed, cycles_per_byte, normalized_perf);
+                "{:>12} cycles = {:>6.3f} cycles/byte | {:>7.2f} GiB/s | {:>5.2f}x", pattern.Elapsed, cycles_per_byte,
+                gib_per_sec, normalized_perf);
 
             if (!skip_fails)
             {
