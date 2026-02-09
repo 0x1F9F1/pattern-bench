@@ -2,9 +2,14 @@
 
 #include "pattern_entry.h"
 
-#include <immintrin.h>
 #include <algorithm>
 #include <cstring>
+
+#include <immintrin.h>
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86) || defined(SIMDE_ENABLE_NATIVE_ALIASES)
+#define FORZA_HAS_X86_SIMD
+#endif
 
 static std::vector<const byte*> find_masked(const byte* data, size_t length, const byte* pattern, const char* mask)
 {
@@ -43,6 +48,7 @@ static std::vector<const byte*> find_masked(const byte* data, size_t length, con
     return results;
 }
 
+#ifdef FORZA_HAS_X86_SIMD
 struct PatternData
 {
     uint32_t Count;
@@ -223,6 +229,7 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
 
     return results;
 }
+#endif // FORZA_HAS_X86_SIMD
 
 void FindLargestArray(const char* Signature, const char* Mask, int Out[2])
 {
@@ -273,6 +280,7 @@ struct forza_pattern_scanner : pattern_scanner
 
 REGISTER_PATTERN(forza_pattern_scanner);
 
+#ifdef FORZA_HAS_X86_SIMD
 struct forza_simd_pattern_scanner : pattern_scanner
 {
     virtual std::vector<const byte*> Scan(
@@ -288,3 +296,4 @@ struct forza_simd_pattern_scanner : pattern_scanner
 };
 
 REGISTER_PATTERN(forza_simd_pattern_scanner);
+#endif // FORZA_HAS_X86_SIMD

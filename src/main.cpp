@@ -46,8 +46,6 @@
 #include <mem/execution_handler.h>
 #include <mem/protect.h>
 
-#include <mem/arch.h>
-
 #include <mem/init_function.h>
 
 #include <mem/cmd_param-inl.h>
@@ -58,6 +56,7 @@
 #include <fmt/format.h>
 
 #include "pattern_entry.h"
+#include "rdtsc.h"
 
 static size_t LOG_LEVEL = 0;
 static bool PATHOLOGICAL_MODE = false;
@@ -1855,7 +1854,7 @@ static bench_run_summary run_benchmark(
                 continue;
 
             const auto start_time = std::chrono::steady_clock::now();
-            const uint64_t start_clock = mem::rdtsc();
+            const uint64_t start_clock = bench_rdtsc();
 
             try
             {
@@ -1897,7 +1896,7 @@ static bench_run_summary run_benchmark(
                 pattern->Failed++;
             }
 
-            const uint64_t end_clock = mem::rdtsc();
+            const uint64_t end_clock = bench_rdtsc();
             const auto end_time = std::chrono::steady_clock::now();
 
             pattern->Elapsed += end_clock - start_clock;

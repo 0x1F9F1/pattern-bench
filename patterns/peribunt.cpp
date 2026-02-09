@@ -28,9 +28,13 @@ static inline uint32_t count_bits(uint32_t v)
 
 static inline uint32_t trailing_zeros(uint32_t v)
 {
+#if defined(_MSC_VER)
     unsigned long idx = 0;
     _BitScanForward(&idx, v);
     return static_cast<uint32_t>(idx);
+#else
+    return static_cast<uint32_t>(__builtin_ctz(v));
+#endif
 }
 
 static const uint8_t* FindPattern(const uint8_t* baseAddress, uint64_t searchLength, const uint8_t* bytePattern,

@@ -7,6 +7,13 @@ project(pattern-bench CXX)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_compile_options(/MP /EHa /arch:AVX2)
+elseif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-7]86")
+    # Non-x86: use SIMDE via shim so <immintrin.h> resolves transparently
+    add_compile_options(-mcpu=native)
+    add_compile_definitions(SIMDE_ENABLE_NATIVE_ALIASES)
+    # Tell mem's simd_scanner to use the SIMD path (it checks these macros)
+    add_compile_definitions(MEM_SIMD_AVX2 MEM_SIMD_AVX MEM_SIMD_SSSE3 MEM_SIMD_SSE3 MEM_SIMD_SSE2 MEM_SIMD_SSE)
+    include_directories(BEFORE SYSTEM compat/simde-shim vendor/simde)
 else()
     add_compile_options(-mavx2)
 endif()

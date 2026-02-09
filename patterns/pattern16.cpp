@@ -2,11 +2,15 @@
 
 #include "pattern_entry.h"
 
-#include <Pattern16.h>
-
 #include <cstring>
 #include <string>
 #include <vector>
+
+// Pattern16 is deeply x86-specific (cpuid, BMI, SSE/AVX intrinsics with
+// missing portable scanner headers).  Disabled entirely on non-x86.
+#if defined(__x86_64__) || defined(_M_X64)
+
+#include <Pattern16.h>
 
 namespace pattern16_impl
 {
@@ -112,3 +116,5 @@ struct pattern16_scanner : pattern_scanner
 };
 
 REGISTER_PATTERN(pattern16_scanner);
+
+#endif // x86_64
