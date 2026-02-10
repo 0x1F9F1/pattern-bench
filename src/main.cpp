@@ -2087,6 +2087,49 @@ static mem::cmd_param cmd_smoke_fuzz {"smoke_fuzz"};
 static mem::cmd_param cmd_data_mode {"data_mode"};
 static mem::cmd_param cmd_corpus {"corpus"};
 static mem::cmd_param cmd_suite {"suite"};
+static mem::cmd_param cmd_help {"help"};
+static mem::cmd_param cmd_help_short {"h"};
+
+static void apply_scanner_filter(const char* filter)
+{
+    if (!filter)
+        return;
+
+    fmt::print("Filter: {}\n", filter);
+
+    auto iter = PATTERN_SCANNERS.begin();
+    while (iter != PATTERN_SCANNERS.end())
+    {
+        const char* name = (*iter)->GetName();
+        if (std::strstr(name, filter))
+            ++iter;
+        else
+            iter = PATTERN_SCANNERS.erase(iter);
+    }
+}
+
+static void print_help(const char* exe_name)
+{
+    const char* exe = exe_name ? exe_name : "pattern-bench.exe";
+
+    fmt::print("Usage: {} [options]\n", exe);
+    fmt::print("Options:\n");
+    fmt::print("  --help, -h                         Show this help and exit\n");
+    fmt::print("  --size <bytes>                     Region size (default: 33554432)\n");
+    fmt::print("  --tests <N>                        Number of randomized tests (default: 256)\n");
+    fmt::print("  --seed <u32>                       RNG seed (default: random_device)\n");
+    fmt::print("  --file <path>                      Scan a file instead of generated region\n");
+    fmt::print("  --filter <text>                    Run only scanners whose name contains text\n");
+    fmt::print("  --full <true|false>                Keep running after failures (default: false)\n");
+    fmt::print("  --test <index>                     Run a single generated test index\n");
+    fmt::print("  --loglevel <N>                     0=minimal, 4=verbose mismatch dumps\n");
+    fmt::print("  --skip_smoke                       Skip startup scanner smoke tests\n");
+    fmt::print("  --smoke_only <true|false>          Run smoke tests and exit\n");
+    fmt::print("  --smoke_fuzz <N>                   Randomized smoke cases (default: 32)\n");
+    fmt::print("  --data_mode <random|synthetic_realistic>\n");
+    fmt::print("  --corpus <mixed|code|structured|text|padding|entropy|all>\n");
+    fmt::print("  --suite <single|realistic|pathological|combined>\n");
+}
 
 int main(int argc, char** argv)
 {
@@ -2097,6 +2140,12 @@ int main(int argc, char** argv)
 
     mem::init_function::init();
     mem::cmd_param::init(argc, argv);
+
+    if (cmd_help.get<bool>() || cmd_help_short.get<bool>())
+    {
+        print_help((argc > 0) ? argv[0] : "pattern-bench.exe");
+        return 0;
+    }
 
     LOG_LEVEL = cmd_log_level.get_or<size_t>(0);
     bool run_all_corpora = false;
@@ -2153,6 +2202,19 @@ int main(int argc, char** argv)
     }
 #endif
 
+    const char* filter = cmd_filter.get();
+    apply_scanner_filter(filter);
+
+    if (PATTERN_SCANNERS.empty())
+    {
+        if (filter)
+            fmt::print("No scanners matched filter '{}'\n", filter);
+        else
+            fmt::print("No Scanners\n");
+
+        return 1;
+    }
+
     if (!cmd_skip_smoke.get<bool>())
     {
         const size_t smoke_fuzz_cases = cmd_smoke_fuzz.get_or<size_t>(32);
@@ -2168,36 +2230,6 @@ int main(int argc, char** argv)
     {
         fmt::print("Smoke-only mode complete.\n");
         return 0;
-    }
-
-    const char* filter = cmd_filter.get();
-
-    if (filter)
-    {
-        fmt::print("Filter: {}\n", filter);
-
-        auto iter = PATTERN_SCANNERS.begin();
-
-        while (iter != PATTERN_SCANNERS.end())
-        {
-            const char* name = (*iter)->GetName();
-
-            if (std::strstr(name, filter))
-            {
-                ++iter;
-            }
-            else
-            {
-                iter = PATTERN_SCANNERS.erase(iter);
-            }
-        }
-    }
-
-    if (PATTERN_SCANNERS.empty())
-    {
-        fmt::print("No Scanners\n");
-
-        return 1;
     }
 
     uint32_t seed = 0;
