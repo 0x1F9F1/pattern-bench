@@ -125,6 +125,39 @@ MEM_STRONG_INLINE bool Matches(const uint8_t* Data, PatternData* Patterns)
     return true;
 }
 
+MEM_STRONG_INLINE bool MatchesFast(const uint8_t* Data, PatternData* Patterns)
+{
+    for (auto i = 0u; i < Patterns->Count; i++)
+    {
+        const int l = static_cast<int>(Patterns->Length[i]);
+        const uint8_t* k = Data + Patterns->Offset[i];
+        const __m128i value = _mm_loadu_si128(reinterpret_cast<const __m128i*>(k));
+
+        if (_mm_cmpestri(Patterns->Value[i], l, value, l, _SIDD_CMP_EQUAL_ORDERED) != 0)
+            return false;
+    }
+
+    return true;
+}
+
+MEM_STRONG_INLINE bool MatchesTail(const uint8_t* Data, const uint8_t* DataEnd, PatternData* Patterns)
+{
+    for (auto i = 0u; i < Patterns->Count; i++)
+    {
+        const int l = static_cast<int>(Patterns->Length[i]);
+        const uint8_t* k = Data + Patterns->Offset[i];
+        const size_t remaining = static_cast<size_t>(DataEnd - k);
+        const __m128i value = (remaining >= 16)
+            ? _mm_loadu_si128(reinterpret_cast<const __m128i*>(k))
+            : load_partial_128(k, remaining);
+
+        if (_mm_cmpestri(Patterns->Value[i], l, value, l, _SIDD_CMP_EQUAL_ORDERED) != 0)
+            return false;
+    }
+
+    return true;
+}
+
 std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, const char* Signature, const char* Mask)
 {
     PatternData d;
@@ -134,7 +167,6 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
         return {};
 
     std::vector<const byte*> results;
-    results.reserve(Length);
 
     if (d.Count == 0)
     {
@@ -144,17 +176,48 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
     }
 
     const int anchor_length = static_cast<int>(d.Length[0]);
+    const int no_match_advance = std::max(1, 16 - anchor_length + 1);
     const byte* const end = Data + (Length - d.Size);
+    const byte* const data_end = Data + Length;
+    const byte* const anchor_end = end + d.FirstOffset;
 
-    for (const byte* candidate = Data; candidate <= end; ++candidate)
+    const size_t max_full_read = static_cast<size_t>(d.Offset[d.Count - 1]) + 16u;
+    const bool has_fast_match_path = Length >= max_full_read;
+    const byte* fast_match_end = has_fast_match_path ? (Data + (Length - max_full_read)) : Data;
+
+    const byte* search = Data + d.FirstOffset;
+    while (search <= anchor_end)
     {
-        const uint8_t* anchor = candidate + d.FirstOffset;
-        const __m128i anchor_value = load_partial_128(anchor, static_cast<size_t>(anchor_length));
+        const int remaining_anchor_starts = static_cast<int>(anchor_end - search + 1);
+        const int hay_length = std::min(16, remaining_anchor_starts + anchor_length - 1);
+        const size_t remaining_data = static_cast<size_t>(data_end - search);
+        const __m128i hay = (hay_length == 16 && remaining_data >= 16)
+            ? _mm_loadu_si128(reinterpret_cast<const __m128i*>(search))
+            : load_partial_128(search, remaining_data);
+        const int pos = _mm_cmpestri(d.Value[0], anchor_length, hay, hay_length, _SIDD_CMP_EQUAL_ORDERED);
 
-        if (_mm_cmpestri(d.Value[0], anchor_length, anchor_value, anchor_length, _SIDD_CMP_EQUAL_ORDERED) == 0)
+        if (pos < hay_length)
         {
-            if (Matches(candidate, &d))
-                results.push_back(candidate);
+            const byte* anchor_hit = search + pos;
+            const byte* candidate = anchor_hit - d.FirstOffset;
+
+            if (candidate >= Data && candidate <= end)
+            {
+                const bool matched =
+                    (has_fast_match_path && candidate <= fast_match_end)
+                    ? MatchesFast(candidate, &d)
+                    : MatchesTail(candidate, data_end, &d);
+                if (matched)
+                    results.push_back(candidate);
+            }
+
+            search = anchor_hit + 1;
+        }
+        else
+        {
+            if (hay_length < 16)
+                break;
+            search += no_match_advance;
         }
     }
 
