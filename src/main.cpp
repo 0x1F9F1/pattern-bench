@@ -492,19 +492,39 @@ class failure_logger
 {
 private:
     bool ready_ {false};
+    bool opened_ {false};
     uint64_t start_epoch_ms_ {0};
     size_t failure_count_ {0};
     std::string command_line_;
     std::string dir_ {"failure_logs"};
     std::string log_path_;
+    std::string session_start_line_;
     std::ofstream log_;
 
     void write_line(const std::string& line)
     {
-        if (!ready_)
+        if (!opened_)
             return;
         log_ << line << "\n";
         log_.flush();
+    }
+
+    bool ensure_opened()
+    {
+        if (opened_)
+            return true;
+
+        if (!ready_ || log_path_.empty())
+            return false;
+
+        ensure_directory_exists(dir_.c_str());
+        log_.open(log_path_.c_str(), std::ios::out | std::ios::binary);
+        opened_ = log_.is_open();
+        if (!opened_)
+            return false;
+
+        write_line(session_start_line_);
+        return true;
     }
 
 public:
@@ -512,7 +532,6 @@ public:
     {
         command_line_ = join_command_line(argc, argv);
         start_epoch_ms_ = epoch_millis();
-        ensure_directory_exists(dir_.c_str());
 
         std::string candidate = fmt::format("{}/pattern-bench-failures-{}.jsonl", dir_, start_epoch_ms_);
         size_t attempt = 1;
@@ -522,20 +541,15 @@ public:
         }
 
         log_path_ = candidate;
-        log_.open(log_path_.c_str(), std::ios::out | std::ios::binary);
-        ready_ = log_.is_open();
-
-        if (ready_)
-        {
-            write_line(fmt::format(
-                "{{\"type\":\"session_start\",\"epoch_ms\":{},\"command\":\"{}\"}}", start_epoch_ms_,
-                json_escape(command_line_)));
-        }
+        ready_ = true;
+        session_start_line_ = fmt::format(
+            "{{\"type\":\"session_start\",\"epoch_ms\":{},\"command\":\"{}\"}}", start_epoch_ms_,
+            json_escape(command_line_));
     }
 
     ~failure_logger()
     {
-        if (ready_)
+        if (opened_)
         {
             write_line(fmt::format(
                 "{{\"type\":\"session_end\",\"epoch_ms\":{},\"failure_count\":{}}}", epoch_millis(), failure_count_));
@@ -1695,7 +1709,7 @@ void failure_logger::log_failure(
     const char* run_label, size_t test_index, const char* scanner_name, const scan_bench& reg, const char* reason,
     const char* exception_text, const std::vector<size_t>* got_offsets, const std::vector<size_t>* expected_offsets)
 {
-    if (!ready_)
+    if (!ensure_opened())
         return;
 
     const size_t id = ++failure_count_;
