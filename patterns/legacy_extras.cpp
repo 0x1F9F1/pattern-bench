@@ -477,6 +477,8 @@ static const byte* find_first(const byte* base, size_t size, const std::string& 
             if (pattern[j] == static_cast<unsigned char>('?'))
             {
                 j += 2;
+                if (j >= pattern_length)
+                    return base + i;
                 continue;
             }
 
@@ -487,7 +489,7 @@ static const byte* find_first(const byte* base, size_t size, const std::string& 
                 break;
 
             j += 3;
-            if (j > (pattern_length - 2))
+            if (j >= pattern_length)
                 return base + i;
         }
     }
@@ -534,7 +536,7 @@ struct mike_pattern_scanner : pattern_scanner
 };
 
 // Disabled by default: fails randomized smoke in this harness.
-// REGISTER_PATTERN(mike_pattern_scanner);
+REGISTER_PATTERN(mike_pattern_scanner);
 
 namespace stevemk14ebr_impl
 {

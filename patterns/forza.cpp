@@ -47,18 +47,31 @@ struct PatternData
 {
     uint32_t Count;
     uint32_t Size;
+    uint32_t FirstOffset;
+    uint32_t Offset[16];
     uint32_t Length[16];
     uint32_t Skip[16];
     __m128i Value[16];
 };
 
+static __m128i load_partial_128(const uint8_t* src, size_t length)
+{
+    alignas(16) uint8_t buffer[16] = {};
+    const size_t copy_length = std::min<size_t>(16, length);
+    if (copy_length != 0)
+        std::memcpy(buffer, src, copy_length);
+    return _mm_loadu_si128(reinterpret_cast<const __m128i*>(buffer));
+}
+
 void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
 {
     auto l = strlen(Mask);
 
+    std::memset(Out, 0, sizeof(*Out));
     Out->Count = 0;
+    Out->FirstOffset = 0;
 
-    for (auto i = 0; i < l; i++)
+    for (auto i = 0u; i < l && Out->Count < 16; i++)
     {
         if (Mask[i] == '?')
             continue;
@@ -79,11 +92,15 @@ void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
             ml++;
         }
 
-        auto c = Out->Count;
+        const auto c = Out->Count;
 
+        Out->Offset[c] = i;
         Out->Length[c] = sl;
         Out->Skip[c] = sl + ml;
-        Out->Value[c] = _mm_loadu_si128((const __m128i*) ((uint8_t*) Signature + i));
+        Out->Value[c] = load_partial_128(reinterpret_cast<const uint8_t*>(Signature + i), static_cast<size_t>(sl));
+
+        if (c == 0)
+            Out->FirstOffset = i;
 
         Out->Count++;
 
@@ -95,23 +112,17 @@ void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
 
 MEM_STRONG_INLINE bool Matches(const uint8_t* Data, PatternData* Patterns)
 {
-    auto k = Data + Patterns->Skip[0];
-
-    for (auto i = 1; i < Patterns->Count; i++)
+    for (auto i = 0u; i < Patterns->Count; i++)
     {
         auto l = Patterns->Length[i];
+        const uint8_t* k = Data + Patterns->Offset[i];
+        const __m128i value = load_partial_128(k, static_cast<size_t>(l));
 
-        if (_mm_cmpestri(Patterns->Value[i], l, _mm_loadu_si128((const __m128i*) k), l,
-                _SIDD_CMP_EQUAL_EACH | _SIDD_MASKED_NEGATIVE_POLARITY) != l)
-            break;
-
-        if (i + 1 == Patterns->Count)
-            return true;
-
-        k += Patterns->Skip[i];
+        if (_mm_cmpestri(Patterns->Value[i], static_cast<int>(l), value, static_cast<int>(l), _SIDD_CMP_EQUAL_ORDERED) != 0)
+            return false;
     }
 
-    return false;
+    return true;
 }
 
 std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, const char* Signature, const char* Mask)
@@ -119,55 +130,32 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
     PatternData d;
     GeneratePattern(Signature, Mask, &d);
 
-    auto out = static_cast<uint8_t*>(nullptr);
-    auto end = Data + Length - d.Size;
+    if (d.Size == 0 || d.Size > Length)
+        return {};
 
     std::vector<const byte*> results;
+    results.reserve(Length);
 
-    // C3010: 'break' : jump out of OpenMP structured block not allowed
-    for (intptr_t i = Length - 32; i >= 0; i -= 32)
+    if (d.Count == 0)
     {
-        auto p = Data + i;
-        auto b = _mm256_loadu_si256((const __m256i*) p);
+        for (uint32_t i = 0; i <= Length - d.Size; ++i)
+            results.push_back(Data + i);
+        return results;
+    }
 
-        // if (_mm256_test_all_zeros(b, b) == 1)
-        //     continue;
+    const int anchor_length = static_cast<int>(d.Length[0]);
+    const byte* const end = Data + (Length - d.Size);
 
-        auto f = _mm_cmpestri(d.Value[0], d.Length[0], _mm256_extractf128_si256(b, 0), 16, _SIDD_CMP_EQUAL_ORDERED);
+    for (const byte* candidate = Data; candidate <= end; ++candidate)
+    {
+        const uint8_t* anchor = candidate + d.FirstOffset;
+        const __m128i anchor_value = load_partial_128(anchor, static_cast<size_t>(anchor_length));
 
-        if (f == 16)
+        if (_mm_cmpestri(d.Value[0], anchor_length, anchor_value, anchor_length, _SIDD_CMP_EQUAL_ORDERED) == 0)
         {
-            f += _mm_cmpestri(d.Value[0], d.Length[0], _mm256_extractf128_si256(b, 1), 16, _SIDD_CMP_EQUAL_ORDERED);
-
-            if (f == 32)
-                continue;
+            if (Matches(candidate, &d))
+                results.push_back(candidate);
         }
-
-    PossibleMatch:
-        p += f;
-
-        if (p + d.Size > end)
-        {
-            for (auto j = 0; j < d.Size && j + i + f < Length; j++)
-            {
-                if (Mask[j] == 'x' && (uint8_t) Signature[j] != p[j])
-                    break;
-
-                if (j + 1 == d.Size)
-                    results.push_back(p);
-            }
-
-            continue;
-        }
-
-        if (Matches(p, &d))
-            results.push_back(p);
-
-        p++;
-        f = _mm_cmpestri(d.Value[0], d.Length[0], _mm_loadu_si128((const __m128i*) p), 16, _SIDD_CMP_EQUAL_ORDERED);
-
-        if (f < 16)
-            goto PossibleMatch;
     }
 
     return results;
@@ -236,4 +224,4 @@ struct forza_simd_pattern_scanner : pattern_scanner
     }
 };
 
-// REGISTER_PATTERN(forza_simd_pattern_scanner);
+REGISTER_PATTERN(forza_simd_pattern_scanner);
