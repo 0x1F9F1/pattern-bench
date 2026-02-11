@@ -130,7 +130,84 @@ static inline const byte* find_next_anchor(const byte* cursor, const byte* end, 
     return find_next_anchor_u8(cursor, end, value[0]);
 }
 
-static std::vector<const byte*> FindAll(const byte* data, size_t length, const byte* pattern, const char* mask)
+static const byte* find_next_anchor_scalar_u8(const byte* cursor, const byte* end, byte value)
+{
+    const void* ptr = std::memchr(cursor, value, static_cast<size_t>(end - cursor));
+    return static_cast<const byte*>(ptr);
+}
+
+static const byte* find_next_anchor_scalar_u16(const byte* cursor, const byte* end, const byte* value)
+{
+    const byte* it = cursor;
+    while (it < end)
+    {
+        const void* ptr = std::memchr(it, value[0], static_cast<size_t>(end - it));
+        if (!ptr)
+            return nullptr;
+
+        const byte* hit = static_cast<const byte*>(ptr);
+        if (hit[1] == value[1])
+            return hit;
+
+        it = hit + 1;
+    }
+
+    return nullptr;
+}
+
+static const byte* find_next_anchor_scalar_u32(const byte* cursor, const byte* end, const byte* value)
+{
+    const byte* it = cursor;
+    while (it < end)
+    {
+        const void* ptr = std::memchr(it, value[0], static_cast<size_t>(end - it));
+        if (!ptr)
+            return nullptr;
+
+        const byte* hit = static_cast<const byte*>(ptr);
+        if (hit[1] == value[1] && hit[2] == value[2] && hit[3] == value[3])
+            return hit;
+
+        it = hit + 1;
+    }
+
+    return nullptr;
+}
+
+static inline const byte* find_next_anchor_scalar(
+    const byte* cursor, const byte* end, const byte* value, size_t width)
+{
+    if (width == 4)
+        return find_next_anchor_scalar_u32(cursor, end, value);
+    if (width == 2)
+        return find_next_anchor_scalar_u16(cursor, end, value);
+    return find_next_anchor_scalar_u8(cursor, end, value[0]);
+}
+
+template <bool UseAvx>
+struct anchor_dispatch;
+
+template <>
+struct anchor_dispatch<true>
+{
+    static inline const byte* find(const byte* cursor, const byte* end, const byte* value, size_t width)
+    {
+        return find_next_anchor(cursor, end, value, width);
+    }
+};
+
+template <>
+struct anchor_dispatch<false>
+{
+    static inline const byte* find(const byte* cursor, const byte* end, const byte* value, size_t width)
+    {
+        return find_next_anchor_scalar(cursor, end, value, width);
+    }
+};
+
+template <bool UseAvx>
+static std::vector<const byte*> FindAllCore(
+    const byte* data, size_t length, const byte* pattern, const char* mask)
 {
     std::vector<const byte*> results;
 
@@ -198,7 +275,7 @@ static std::vector<const byte*> FindAll(const byte* data, size_t length, const b
 
     while (cursor < end)
     {
-        const byte* hit = find_next_anchor(cursor, end, sentinel, sentinel_width);
+        const byte* hit = anchor_dispatch<UseAvx>::find(cursor, end, sentinel, sentinel_width);
         if (!hit)
             break;
 
@@ -211,6 +288,16 @@ static std::vector<const byte*> FindAll(const byte* data, size_t length, const b
 
     return results;
 }
+
+static std::vector<const byte*> FindAllAvx(const byte* data, size_t length, const byte* pattern, const char* mask)
+{
+    return FindAllCore<true>(data, length, pattern, mask);
+}
+
+static std::vector<const byte*> FindAllNoAvx(const byte* data, size_t length, const byte* pattern, const char* mask)
+{
+    return FindAllCore<false>(data, length, pattern, mask);
+}
 } // namespace can_impl
 
 struct can_pattern_scanner : pattern_scanner
@@ -218,13 +305,29 @@ struct can_pattern_scanner : pattern_scanner
     virtual std::vector<const byte*> Scan(
         const byte* pattern, const char* mask, const byte* data, size_t length) const override
     {
-        return can_impl::FindAll(data, length, pattern, mask);
+        return can_impl::FindAllAvx(data, length, pattern, mask);
     }
 
     virtual const char* GetName() const override
     {
-        return "Can";
+        return "Can (AVX2)";
     }
 };
 
 REGISTER_PATTERN(can_pattern_scanner);
+
+struct can_no_avx_pattern_scanner : pattern_scanner
+{
+    virtual std::vector<const byte*> Scan(
+        const byte* pattern, const char* mask, const byte* data, size_t length) const override
+    {
+        return can_impl::FindAllNoAvx(data, length, pattern, mask);
+    }
+
+    virtual const char* GetName() const override
+    {
+        return "Can (Scalar)";
+    }
+};
+
+REGISTER_PATTERN(can_no_avx_pattern_scanner);
