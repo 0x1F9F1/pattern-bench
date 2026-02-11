@@ -23,6 +23,7 @@ add_executable(${PROJECT_NAME}
     patterns/mrexodia.cpp
     patterns/darth_ton.cpp
     patterns/lightning_scanner.cpp
+    patterns/can.cpp
     patterns/tbs.cpp
     patterns/sig.cpp
     patterns/libhat.cpp
