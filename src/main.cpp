@@ -1942,8 +1942,6 @@ static void print_run_summary(const bench_run_summary& summary, bool skip_fails)
     {
         const scanner_bench_result& pattern = summary.results[i];
 
-        fmt::print("{:<32} | ", pattern.name);
-
         if (!best_set && (!skip_fails || pattern.failed == 0))
         {
             best_perf = pattern.cycles_per_byte;
@@ -1954,6 +1952,35 @@ static void print_run_summary(const bench_run_summary& summary, bool skip_fails)
             best_perf = pattern.cycles_per_byte;
             best_set = true;
         }
+    }
+
+    size_t name_width = 32;
+    size_t elapsed_width = 12;
+    size_t cpb_width = 6;
+    size_t gib_width = 7;
+    size_t norm_width = 5;
+
+    for (size_t i = 0; i < summary.results.size(); ++i)
+    {
+        const scanner_bench_result& pattern = summary.results[i];
+        name_width = (std::max)(name_width, pattern.name.size());
+
+        if (skip_fails && pattern.failed)
+            continue;
+
+        elapsed_width = (std::max)(elapsed_width, fmt::format("{}", pattern.elapsed).size());
+        cpb_width = (std::max)(cpb_width, fmt::format("{:.3f}", pattern.cycles_per_byte).size());
+        gib_width = (std::max)(gib_width, fmt::format("{:.2f}", pattern.gib_per_sec).size());
+
+        const double normalized_perf = (best_perf != 0.0) ? (pattern.cycles_per_byte / best_perf) : 0.0;
+        norm_width = (std::max)(norm_width, fmt::format("{:.2f}", normalized_perf).size());
+    }
+
+    for (size_t i = 0; i < summary.results.size(); ++i)
+    {
+        const scanner_bench_result& pattern = summary.results[i];
+
+        fmt::print("{:<{}} | ", pattern.name, name_width);
 
         const double normalized_perf = (best_perf != 0.0) ? (pattern.cycles_per_byte / best_perf) : 0.0;
 
@@ -1963,8 +1990,9 @@ static void print_run_summary(const bench_run_summary& summary, bool skip_fails)
         }
         else
         {
-            fmt::print("{:>12} cycles = {:>6.3f} cycles/byte | {:>7.2f} GiB/s | {:>5.2f}x", pattern.elapsed,
-                pattern.cycles_per_byte, pattern.gib_per_sec, normalized_perf);
+            fmt::print("{:>{}} cycles = {:>{}.3f} cycles/byte | {:>{}.2f} GiB/s | {:>{}.2f}x", pattern.elapsed,
+                elapsed_width, pattern.cycles_per_byte, cpb_width, pattern.gib_per_sec, gib_width, normalized_perf,
+                norm_width);
 
             if (!skip_fails)
                 fmt::print(" | {} failed", pattern.failed);
@@ -2061,9 +2089,30 @@ static void print_suite_aggregate(const std::vector<bench_run_summary>& runs, bo
         best_set = true;
     }
 
+    size_t name_width = 32;
+    size_t geo_width = 6;
+    size_t mean_width = 6;
+    size_t norm_width = 5;
+
+    for (size_t i = 0; i < aggregate.size(); ++i)
+    {
+        const aggregate_scanner_result& scanner = aggregate[i];
+        name_width = (std::max)(name_width, scanner.name.size());
+
+        if (skip_fails && scanner.fail_corpora != 0)
+            continue;
+
+        geo_width = (std::max)(geo_width, fmt::format("{:.3f}", scanner.geomean_cycles_per_byte).size());
+        mean_width = (std::max)(mean_width, fmt::format("{:.3f}", scanner.arithmetic_cycles_per_byte).size());
+        const double normalized = (best_set && best_perf != 0.0)
+            ? (scanner.geomean_cycles_per_byte / best_perf)
+            : 0.0;
+        norm_width = (std::max)(norm_width, fmt::format("{:.2f}", normalized).size());
+    }
+
     for (const aggregate_scanner_result& scanner : aggregate)
     {
-        fmt::print("{:<32} | ", scanner.name);
+        fmt::print("{:<{}} | ", scanner.name, name_width);
 
         if (skip_fails && scanner.fail_corpora != 0)
         {
@@ -2074,8 +2123,8 @@ static void print_suite_aggregate(const std::vector<bench_run_summary>& runs, bo
             const double normalized = (best_set && best_perf != 0.0)
                 ? (scanner.geomean_cycles_per_byte / best_perf)
                 : 0.0;
-            fmt::print("geo {:>6.3f} cpb | mean {:>6.3f} cpb | {:>5.2f}x", scanner.geomean_cycles_per_byte,
-                scanner.arithmetic_cycles_per_byte, normalized);
+            fmt::print("geo {:>{}.3f} cpb | mean {:>{}.3f} cpb | {:>{}.2f}x", scanner.geomean_cycles_per_byte,
+                geo_width, scanner.arithmetic_cycles_per_byte, mean_width, normalized, norm_width);
             if (!skip_fails)
             {
                 fmt::print(" | {} / {} runs failed | {} failed tests", scanner.fail_corpora, runs.size(),
