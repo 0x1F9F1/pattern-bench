@@ -48,4 +48,4 @@ struct std_regex_scanner : pattern_scanner
     }
 };
 
-REGISTER_PATTERN(std_regex_scanner);
+// REGISTER_PATTERN(std_regex_scanner);

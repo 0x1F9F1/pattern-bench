@@ -536,7 +536,7 @@ struct mike_pattern_scanner : pattern_scanner
 };
 
 // Disabled by default: fails randomized smoke in this harness.
-REGISTER_PATTERN(mike_pattern_scanner);
+// REGISTER_PATTERN(mike_pattern_scanner);
 
 namespace stevemk14ebr_impl
 {
