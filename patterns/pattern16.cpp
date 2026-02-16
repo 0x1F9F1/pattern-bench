@@ -2,6 +2,7 @@
 
 #include "pattern_entry.h"
 
+#if 0
 #include <cstring>
 #include <string>
 #include <vector>
@@ -118,3 +119,4 @@ struct pattern16_scanner : pattern_scanner
 REGISTER_PATTERN(pattern16_scanner);
 
 #endif // x86_64
+#endif
