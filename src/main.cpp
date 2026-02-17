@@ -804,13 +804,9 @@ static bool run_scanner_smoke_tests(size_t fuzz_cases)
         cases.push_back(sparse_false_negative);
     }
 
-    const size_t total_cases = cases.size() + fuzz_cases;
-    size_t completed_cases = 0;
-
     for (const auto& test_case : cases)
     {
         run_scanner_case(stats, handler, test_case);
-        ++completed_cases;
     }
 
     std::mt19937 rng(0xC0DEFACEu);
@@ -873,7 +869,6 @@ static bool run_scanner_smoke_tests(size_t fuzz_cases)
         }
 
         run_scanner_case(stats, handler, fuzz);
-        ++completed_cases;
     }
 
     fmt::print("Scanner smoke tests: {} passed, {} failed\n", stats.passed, stats.failed);
