@@ -2,24 +2,82 @@
 
 #include "pattern_entry.h"
 
+#include <algorithm>
+#include <cstring>
+
 #include <immintrin.h>
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86) || defined(SIMDE_ENABLE_NATIVE_ALIASES)
+#define FORZA_HAS_X86_SIMD
+#endif
+
+static std::vector<const byte*> find_masked(const byte* data, size_t length, const byte* pattern, const char* mask)
+{
+    const size_t pattern_length = std::strlen(mask);
+    if (pattern_length == 0 || pattern_length > length)
+        return {};
+
+    ptrdiff_t last[UCHAR_MAX + 1];
+    const char* wild = std::strrchr(mask, '?');
+    std::fill(std::begin(last), std::end(last), wild ? (wild - mask) : -1);
+
+    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(pattern_length); ++i)
+    {
+        if (mask[i] == 'x' && last[pattern[i]] < i)
+            last[pattern[i]] = i;
+    }
+
+    std::vector<const byte*> results;
+    for (const byte *cursor = data, *end = data + (length - pattern_length); cursor <= end;)
+    {
+        ptrdiff_t i = static_cast<ptrdiff_t>(pattern_length) - 1;
+        while (i >= 0 && (mask[i] == '?' || pattern[i] == cursor[i]))
+            --i;
+
+        if (i < 0)
+        {
+            results.push_back(cursor);
+            ++cursor;
+        }
+        else
+        {
+            cursor += std::max<ptrdiff_t>(1, i - last[cursor[i]]);
+        }
+    }
+
+    return results;
+}
+
+#ifdef FORZA_HAS_X86_SIMD
 struct PatternData
 {
     uint32_t Count;
     uint32_t Size;
+    uint32_t FirstOffset;
+    uint32_t Offset[16];
     uint32_t Length[16];
     uint32_t Skip[16];
     __m128i Value[16];
 };
 
+static __m128i load_partial_128(const uint8_t* src, size_t length)
+{
+    alignas(16) uint8_t buffer[16] = {};
+    const size_t copy_length = std::min<size_t>(16, length);
+    if (copy_length != 0)
+        std::memcpy(buffer, src, copy_length);
+    return _mm_loadu_si128(reinterpret_cast<const __m128i*>(buffer));
+}
+
 void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
 {
     auto l = strlen(Mask);
 
+    std::memset(Out, 0, sizeof(*Out));
     Out->Count = 0;
+    Out->FirstOffset = 0;
 
-    for (auto i = 0; i < l; i++)
+    for (auto i = 0u; i < l && Out->Count < 16; i++)
     {
         if (Mask[i] == '?')
             continue;
@@ -40,11 +98,15 @@ void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
             ml++;
         }
 
-        auto c = Out->Count;
+        const auto c = Out->Count;
 
+        Out->Offset[c] = i;
         Out->Length[c] = sl;
         Out->Skip[c] = sl + ml;
-        Out->Value[c] = _mm_loadu_si128((const __m128i*) ((uint8_t*) Signature + i));
+        Out->Value[c] = load_partial_128(reinterpret_cast<const uint8_t*>(Signature + i), static_cast<size_t>(sl));
+
+        if (c == 0)
+            Out->FirstOffset = i;
 
         Out->Count++;
 
@@ -56,23 +118,50 @@ void GeneratePattern(const char* Signature, const char* Mask, PatternData* Out)
 
 MEM_STRONG_INLINE bool Matches(const uint8_t* Data, PatternData* Patterns)
 {
-    auto k = Data + Patterns->Skip[0];
-
-    for (auto i = 1; i < Patterns->Count; i++)
+    for (auto i = 0u; i < Patterns->Count; i++)
     {
         auto l = Patterns->Length[i];
+        const uint8_t* k = Data + Patterns->Offset[i];
+        const __m128i value = load_partial_128(k, static_cast<size_t>(l));
 
-        if (_mm_cmpestri(Patterns->Value[i], l, _mm_loadu_si128((const __m128i*) k), l,
-                _SIDD_CMP_EQUAL_EACH | _SIDD_MASKED_NEGATIVE_POLARITY) != l)
-            break;
-
-        if (i + 1 == Patterns->Count)
-            return true;
-
-        k += Patterns->Skip[i];
+        if (_mm_cmpestri(Patterns->Value[i], static_cast<int>(l), value, static_cast<int>(l), _SIDD_CMP_EQUAL_ORDERED) != 0)
+            return false;
     }
 
-    return false;
+    return true;
+}
+
+MEM_STRONG_INLINE bool MatchesFast(const uint8_t* Data, PatternData* Patterns)
+{
+    for (auto i = 0u; i < Patterns->Count; i++)
+    {
+        const int l = static_cast<int>(Patterns->Length[i]);
+        const uint8_t* k = Data + Patterns->Offset[i];
+        const __m128i value = _mm_loadu_si128(reinterpret_cast<const __m128i*>(k));
+
+        if (_mm_cmpestri(Patterns->Value[i], l, value, l, _SIDD_CMP_EQUAL_ORDERED) != 0)
+            return false;
+    }
+
+    return true;
+}
+
+MEM_STRONG_INLINE bool MatchesTail(const uint8_t* Data, const uint8_t* DataEnd, PatternData* Patterns)
+{
+    for (auto i = 0u; i < Patterns->Count; i++)
+    {
+        const int l = static_cast<int>(Patterns->Length[i]);
+        const uint8_t* k = Data + Patterns->Offset[i];
+        const size_t remaining = static_cast<size_t>(DataEnd - k);
+        const __m128i value = (remaining >= 16)
+            ? _mm_loadu_si128(reinterpret_cast<const __m128i*>(k))
+            : load_partial_128(k, remaining);
+
+        if (_mm_cmpestri(Patterns->Value[i], l, value, l, _SIDD_CMP_EQUAL_ORDERED) != 0)
+            return false;
+    }
+
+    return true;
 }
 
 std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, const char* Signature, const char* Mask)
@@ -80,59 +169,67 @@ std::vector<const byte*> FindEx(const uint8_t* Data, const uint32_t Length, cons
     PatternData d;
     GeneratePattern(Signature, Mask, &d);
 
-    auto out = static_cast<uint8_t*>(nullptr);
-    auto end = Data + Length - d.Size;
+    if (d.Size == 0 || d.Size > Length)
+        return {};
 
     std::vector<const byte*> results;
 
-    // C3010: 'break' : jump out of OpenMP structured block not allowed
-    for (intptr_t i = Length - 32; i >= 0; i -= 32)
+    if (d.Count == 0)
     {
-        auto p = Data + i;
-        auto b = _mm256_loadu_si256((const __m256i*) p);
+        for (uint32_t i = 0; i <= Length - d.Size; ++i)
+            results.push_back(Data + i);
+        return results;
+    }
 
-        // if (_mm256_test_all_zeros(b, b) == 1)
-        //     continue;
+    const int anchor_length = static_cast<int>(d.Length[0]);
+    const int no_match_advance = std::max(1, 16 - anchor_length + 1);
+    const byte* const end = Data + (Length - d.Size);
+    const byte* const data_end = Data + Length;
+    const byte* const anchor_end = end + d.FirstOffset;
 
-        auto f = _mm_cmpestri(d.Value[0], d.Length[0], _mm256_extractf128_si256(b, 0), 16, _SIDD_CMP_EQUAL_ORDERED);
+    const size_t max_full_read = static_cast<size_t>(d.Offset[d.Count - 1]) + 16u;
+    const bool has_fast_match_path = Length >= max_full_read;
+    const byte* fast_match_end = has_fast_match_path ? (Data + (Length - max_full_read)) : Data;
 
-        if (f == 16)
+    const byte* search = Data + d.FirstOffset;
+    while (search <= anchor_end)
+    {
+        const int remaining_anchor_starts = static_cast<int>(anchor_end - search + 1);
+        const int hay_length = std::min(16, remaining_anchor_starts + anchor_length - 1);
+        const size_t remaining_data = static_cast<size_t>(data_end - search);
+        const __m128i hay = (hay_length == 16 && remaining_data >= 16)
+            ? _mm_loadu_si128(reinterpret_cast<const __m128i*>(search))
+            : load_partial_128(search, remaining_data);
+        const int pos = _mm_cmpestri(d.Value[0], anchor_length, hay, hay_length, _SIDD_CMP_EQUAL_ORDERED);
+
+        if (pos < hay_length)
         {
-            f += _mm_cmpestri(d.Value[0], d.Length[0], _mm256_extractf128_si256(b, 1), 16, _SIDD_CMP_EQUAL_ORDERED);
+            const byte* anchor_hit = search + pos;
+            const byte* candidate = anchor_hit - d.FirstOffset;
 
-            if (f == 32)
-                continue;
-        }
-
-    PossibleMatch:
-        p += f;
-
-        if (p + d.Size > end)
-        {
-            for (auto j = 0; j < d.Size && j + i + f < Length; j++)
+            if (candidate >= Data && candidate <= end)
             {
-                if (Mask[j] == 'x' && (uint8_t) Signature[j] != p[j])
-                    break;
-
-                if (j + 1 == d.Size)
-                    results.push_back(p);
+                const bool matched =
+                    (has_fast_match_path && candidate <= fast_match_end)
+                    ? MatchesFast(candidate, &d)
+                    : MatchesTail(candidate, data_end, &d);
+                if (matched)
+                    results.push_back(candidate);
             }
 
-            continue;
+            search = anchor_hit + 1;
         }
-
-        if (Matches(p, &d))
-            results.push_back(p);
-
-        p++;
-        f = _mm_cmpestri(d.Value[0], d.Length[0], _mm_loadu_si128((const __m128i*) p), 16, _SIDD_CMP_EQUAL_ORDERED);
-
-        if (f < 16)
-            goto PossibleMatch;
+        else
+        {
+            if (hay_length < 16)
+                break;
+            search += no_match_advance;
+        }
     }
 
     return results;
 }
+#endif // FORZA_HAS_X86_SIMD
 
 void FindLargestArray(const char* Signature, const char* Mask, int Out[2])
 {
@@ -164,60 +261,7 @@ void FindLargestArray(const char* Signature, const char* Mask, int Out[2])
 
 std::vector<const byte*> Find(const byte* Data, const uint32_t Length, const char* Signature, const char* Mask)
 {
-    int d[2] = {0};
-    FindLargestArray(Signature, Mask, d);
-
-    const uint8_t len = static_cast<uint8_t>(strlen(Mask));
-    const uint8_t mbeg = static_cast<uint8_t>(d[0]);
-    const uint8_t mlen = static_cast<uint8_t>(d[1]);
-    const uint8_t mfirst = static_cast<uint8_t>(Signature[mbeg]);
-
-    uint8_t wildcard[UCHAR_MAX + 1] = {0};
-
-    for (auto i = mbeg; i < mbeg + mlen; i++)
-        wildcard[(uint8_t) Signature[i]] = 1;
-
-    std::vector<const byte*> results;
-
-    for (int i = Length - len; i >= 0; i--)
-    {
-        auto c = Data[i];
-        auto w = wildcard[c];
-        auto k = 0;
-
-        while (w == 0 && i > mlen)
-        {
-            i -= mlen;
-            w = wildcard[Data[i]];
-            k = 1;
-        }
-
-        if (k == 1)
-        {
-            i++;
-            continue;
-        }
-
-        if (c != mfirst)
-            continue;
-
-        if (i - mbeg < 0 || i - mbeg + len > Length)
-            break;
-
-        for (auto j = 0; j < len - 1; j++)
-        {
-            if (j == mbeg || Mask[j] != 'x')
-                continue;
-
-            if (Data[i - mbeg + j] != (uint8_t) Signature[j])
-                break;
-
-            if (j + 1 == len - 1)
-                results.push_back((uint8_t*) (Data + i - mbeg));
-        }
-    }
-
-    return results;
+    return find_masked(Data, Length, reinterpret_cast<const byte*>(Signature), Mask);
 }
 
 struct forza_pattern_scanner : pattern_scanner
@@ -236,6 +280,7 @@ struct forza_pattern_scanner : pattern_scanner
 
 REGISTER_PATTERN(forza_pattern_scanner);
 
+#ifdef FORZA_HAS_X86_SIMD
 struct forza_simd_pattern_scanner : pattern_scanner
 {
     virtual std::vector<const byte*> Scan(
@@ -250,4 +295,5 @@ struct forza_simd_pattern_scanner : pattern_scanner
     }
 };
 
-// REGISTER_PATTERN(forza_simd_pattern_scanner);
+REGISTER_PATTERN(forza_simd_pattern_scanner);
+#endif // FORZA_HAS_X86_SIMD

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.4...4.2)
 
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
@@ -7,6 +7,13 @@ project(pattern-bench CXX)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_compile_options(/MP /EHa /arch:AVX2)
+elseif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-7]86")
+    # Non-x86: use SIMDE via shim so <immintrin.h> resolves transparently
+    add_compile_options(-mcpu=native)
+    add_compile_definitions(SIMDE_ENABLE_NATIVE_ALIASES)
+    # Tell mem's simd_scanner to use the SIMD path (it checks these macros)
+    add_compile_definitions(MEM_SIMD_AVX2 MEM_SIMD_AVX MEM_SIMD_SSSE3 MEM_SIMD_SSE3 MEM_SIMD_SSE2 MEM_SIMD_SSE)
+    include_directories(BEFORE SYSTEM compat/simde-shim vendor/simde)
 else()
     add_compile_options(-mavx2)
 endif()
@@ -22,7 +29,17 @@ add_executable(${PROJECT_NAME}
     patterns/forza.cpp
     patterns/mrexodia.cpp
     patterns/darth_ton.cpp
+    patterns/lightning_scanner.cpp
+    patterns/can.cpp
+    patterns/tbs.cpp
+    patterns/sig.cpp
+    patterns/libhat.cpp
+    patterns/peribunt.cpp
+    patterns/x64dbg.cpp
+    patterns/x64dbg_bmh.cpp
     patterns/std_regex.cpp
+    patterns/pattern16.cpp
+    patterns/legacy_extras.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
@@ -30,7 +47,11 @@ add_subdirectory(vendor EXCLUDE_FROM_ALL)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    include)
+    include
+    vendor/pattern16/include)
+
+set_source_files_properties(patterns/pattern16.cpp PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/std:c++20>;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-std=c++20>")
 
 target_link_libraries(${PROJECT_NAME}
     mem fmt)

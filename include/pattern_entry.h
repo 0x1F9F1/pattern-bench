@@ -30,6 +30,7 @@ using mem::byte;
 struct pattern_scanner
 {
     uint64_t Elapsed {0};
+    uint64_t ElapsedNs {0};
     size_t Failed {0};
 
     virtual ~pattern_scanner() = default;

@@ -4,3 +4,6 @@
 [submodule "vendor/fmt"]
 	path = vendor/fmt
 	url = https://github.com/fmtlib/fmt.git
+[submodule "vendor/simde"]
+	path = vendor/simde
+	url = https://github.com/mrexodia/simde.git

@@ -3,8 +3,47 @@
 #include "pattern_entry.h"
 
 #include <immintrin.h>
+#include <algorithm>
+#include <cstring>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+
+static std::vector<const byte*> find_masked(const byte* data, size_t length, const byte* pattern, const char* mask)
+{
+    const size_t pattern_length = std::strlen(mask);
+    if (pattern_length == 0 || pattern_length > length)
+        return {};
+
+    ptrdiff_t last[UCHAR_MAX + 1];
+    const char* wild = std::strrchr(mask, '?');
+    std::fill(std::begin(last), std::end(last), wild ? (wild - mask) : -1);
+
+    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(pattern_length); ++i)
+    {
+        if (mask[i] == 'x' && last[pattern[i]] < i)
+            last[pattern[i]] = i;
+    }
+
+    std::vector<const byte*> results;
+    for (const byte *cursor = data, *end = data + (length - pattern_length); cursor <= end;)
+    {
+        ptrdiff_t i = static_cast<ptrdiff_t>(pattern_length) - 1;
+        while (i >= 0 && (mask[i] == '?' || pattern[i] == cursor[i]))
+            --i;
+
+        if (i < 0)
+        {
+            results.push_back(cursor);
+            ++cursor;
+        }
+        else
+        {
+            cursor += std::max<ptrdiff_t>(1, i - last[cursor[i]]);
+        }
+    }
+
+    return results;
+}
 
 // Boyer-Moore-Horspool with wildcards implementation
 void FillShiftTable(const uint8_t* pPattern, size_t patternSize, const char* pMask, size_t* bad_char_skip)
@@ -66,54 +105,7 @@ struct PartData
 
 std::vector<const byte*> Search2(const uint8_t* data, const uint32_t size, const uint8_t* pattern, const char* mask)
 {
-    auto len = strlen(mask);
-    auto first = strchr(mask, '?');
-    size_t len2 = (first != nullptr) ? (first - mask) : len;
-    auto firstlen = min(len2, 16);
-    intptr_t num_parts = (len < 16 || len % 16) ? (len / 16 + 1) : (len / 16);
-    PartData parts[4];
-
-    for (intptr_t i = 0; i < num_parts; ++i, len -= 16)
-    {
-        for (size_t j = 0; j < min(len, 16) - 1; ++j)
-            if (mask[16 * i + j] == 'x')
-                parts[i].mask |= (1 << j);
-
-        parts[i].needle = _mm_loadu_si128((const __m128i*) (pattern + i * 16));
-    }
-
-    std::vector<const byte*> results;
-
-    for (intptr_t i = 0; i < static_cast<intptr_t>(size) / 32 - 1; ++i)
-    {
-        // auto block = _mm256_loadu_si256( (const __m256i*)data + i );
-        // if (_mm256_testz_si256( block, block ))
-        //     continue;
-
-        auto offset = _mm_cmpestri(
-            parts->needle, firstlen, _mm_loadu_si128((const __m128i*) (data + i * 32)), 16, _SIDD_CMP_EQUAL_ORDERED);
-        if (offset == 16)
-        {
-            offset += _mm_cmpestri(parts->needle, firstlen, _mm_loadu_si128((const __m128i*) (data + i * 32 + 16)), 16,
-                _SIDD_CMP_EQUAL_ORDERED);
-            if (offset == 32)
-                continue;
-        }
-
-        for (intptr_t j = 0; j < num_parts; ++j)
-        {
-            auto hay = _mm_loadu_si128((const __m128i*) (data + (2 * i + j) * 16 + offset));
-            auto bitmask = _mm_movemask_epi8(_mm_cmpeq_epi8(hay, parts[j].needle));
-            if ((bitmask & parts[j].mask) != parts[j].mask)
-                goto next;
-        }
-
-        results.push_back(data + 32 * i + offset);
-
-    next:;
-    }
-
-    return results;
+    return find_masked(data, size, pattern, mask);
 }
 
 struct darth_ton_pattern_scanner : pattern_scanner
