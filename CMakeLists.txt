@@ -1,12 +1,26 @@
-cmake_minimum_required(VERSION 3.4...4.2)
+cmake_minimum_required(VERSION 3.25...4.2)
 
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+set(CMAKE_OPTIMIZE_DEPENDENCIES ON)
+set(CMAKE_CONFIGURATION_TYPES Debug;Release)
+option(BUILD_SHARED_LIBS "Build Shared Libraries" OFF)
 
 project(pattern-bench CXX)
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+set(output_directory "${CMAKE_BINARY_DIR}/out/$<CONFIG>/")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${output_directory}/lib/")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${output_directory}/bin/")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${output_directory}/bin/")
+set(CMAKE_PDB_OUTPUT_DIRECTORY "${output_directory}/dbg/")
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
+
+if (MSVC)
     add_compile_options(/MP /EHa /arch:AVX2)
+    add_link_options(/DEBUG /INCREMENTAL:NO /OPT:REF)
 elseif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-7]86")
     # Non-x86: use SIMDE via shim so <immintrin.h> resolves transparently
     add_compile_options(-mcpu=native)
@@ -50,15 +64,5 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     include
     vendor/pattern16/include)
 
-set_source_files_properties(patterns/pattern16.cpp PROPERTIES
-    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/std:c++20>;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-std=c++20>")
-
 target_link_libraries(${PROJECT_NAME}
     mem fmt)
-
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CXX_STANDARD 11
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin
-    CXX_STANDARD_REQUIRED ON)
