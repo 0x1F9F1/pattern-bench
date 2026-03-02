@@ -56,3 +56,60 @@ std::vector<const byte*> FindPatternSimple(const byte* data, size_t length, cons
 
     return results;
 }
+
+static inline char hex_upper(unsigned int v)
+{
+    return static_cast<char>((v < 10u) ? ('0' + v) : ('A' + (v - 10u)));
+}
+
+std::string MakeCompactHexPattern(const byte* pattern, const char* mask)
+{
+    const size_t length = std::strlen(mask);
+    std::string out;
+    out.reserve(length * 2);
+
+    for (size_t i = 0; i < length; ++i)
+    {
+        if (mask[i] == '?')
+        {
+            out.push_back('?');
+            out.push_back('?');
+        }
+        else
+        {
+            const unsigned int value = static_cast<unsigned int>(pattern[i]);
+            out.push_back(hex_upper((value >> 4) & 0xFu));
+            out.push_back(hex_upper(value & 0xFu));
+        }
+    }
+
+    return out;
+}
+
+std::string MakeSpacedHexPattern(const byte* pattern, const char* mask, bool single_wildcard_token)
+{
+    const size_t length = std::strlen(mask);
+    std::string out;
+    out.reserve(length * 3);
+
+    for (size_t i = 0; i < length; ++i)
+    {
+        if (i != 0)
+            out.push_back(' ');
+
+        if (mask[i] == '?')
+        {
+            out.push_back('?');
+            if (!single_wildcard_token)
+                out.push_back('?');
+        }
+        else
+        {
+            const unsigned int value = static_cast<unsigned int>(pattern[i]);
+            out.push_back(hex_upper((value >> 4) & 0xFu));
+            out.push_back(hex_upper(value & 0xFu));
+        }
+    }
+
+    return out;
+}

@@ -11,66 +11,6 @@
 #include <utility>
 #include <vector>
 
-namespace legacy_common
-{
-static inline char hex_upper(unsigned int v)
-{
-    return static_cast<char>((v < 10u) ? ('0' + v) : ('A' + (v - 10u)));
-}
-
-static std::string make_compact_hex_pattern(const byte* pattern, const char* mask)
-{
-    const size_t length = std::strlen(mask);
-    std::string out;
-    out.reserve(length * 2);
-
-    for (size_t i = 0; i < length; ++i)
-    {
-        if (mask[i] == '?')
-        {
-            out.push_back('?');
-            out.push_back('?');
-        }
-        else
-        {
-            const unsigned int value = static_cast<unsigned int>(pattern[i]);
-            out.push_back(hex_upper((value >> 4) & 0xFu));
-            out.push_back(hex_upper(value & 0xFu));
-        }
-    }
-
-    return out;
-}
-
-static std::string make_spaced_hex_pattern(const byte* pattern, const char* mask, bool single_wildcard_token)
-{
-    const size_t length = std::strlen(mask);
-    std::string out;
-    out.reserve(length * 3);
-
-    for (size_t i = 0; i < length; ++i)
-    {
-        if (i != 0)
-            out.push_back(' ');
-
-        if (mask[i] == '?')
-        {
-            out.push_back('?');
-            if (!single_wildcard_token)
-                out.push_back('?');
-        }
-        else
-        {
-            const unsigned int value = static_cast<unsigned int>(pattern[i]);
-            out.push_back(hex_upper((value >> 4) & 0xFu));
-            out.push_back(hex_upper(value & 0xFu));
-        }
-    }
-
-    return out;
-}
-} // namespace legacy_common
-
 namespace atom0s_impl
 {
 static std::vector<std::pair<byte, bool>> build_pattern(const byte* pattern, const char* mask)
@@ -241,7 +181,7 @@ static const byte* find_first(const byte* begin, const byte* end, const std::vec
 static std::vector<const byte*> find_all(const byte* data, size_t length, const byte* pattern, const char* mask)
 {
     std::vector<const byte*> results;
-    const std::string pattern_text = legacy_common::make_compact_hex_pattern(pattern, mask);
+    const std::string pattern_text = MakeCompactHexPattern(pattern, mask);
 
     std::vector<PatternByte> pat;
     if (!transform_pattern(pattern_text, pat) || pat.size() > length)
@@ -334,7 +274,7 @@ static std::vector<const byte*> find_all(const byte* data, size_t length, const 
     if (pattern_length == 0 || pattern_length > length)
         return results;
 
-    const std::string pattern_text = legacy_common::make_spaced_hex_pattern(pattern, mask, false);
+    const std::string pattern_text = MakeSpacedHexPattern(pattern, mask, false);
 
     size_t base = 0;
     while (base < length)
@@ -428,7 +368,7 @@ static std::vector<const byte*> find_all(const byte* data, size_t length, const 
     if (pattern_length == 0 || pattern_length > length)
         return results;
 
-    const std::string pattern_text = legacy_common::make_spaced_hex_pattern(pattern, mask, false);
+    const std::string pattern_text = MakeSpacedHexPattern(pattern, mask, false);
 
     size_t base = 0;
     while (base < length)
@@ -504,7 +444,7 @@ static std::vector<const byte*> find_all(const byte* data, size_t length, const 
     if (pattern_length == 0 || pattern_length > length)
         return results;
 
-    const std::string pattern_text = legacy_common::make_spaced_hex_pattern(pattern, mask, true);
+    const std::string pattern_text = MakeSpacedHexPattern(pattern, mask, true);
 
     size_t base = 0;
     while (base < length)
@@ -591,7 +531,7 @@ static std::vector<const byte*> find_all(const byte* data, size_t length, const 
     if (pattern_length == 0 || pattern_length > length)
         return results;
 
-    const std::string pattern_text = legacy_common::make_spaced_hex_pattern(pattern, mask, false);
+    const std::string pattern_text = MakeSpacedHexPattern(pattern, mask, false);
 
     size_t base = 0;
     while (base < length)

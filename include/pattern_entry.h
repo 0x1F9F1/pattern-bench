@@ -22,6 +22,7 @@
 #include <mem/init_function.h>
 #include <mem/mem.h>
 
+#include <string>
 #include <memory>
 #include <vector>
 
@@ -51,3 +52,6 @@ extern std::vector<std::unique_ptr<pattern_scanner>> PATTERN_SCANNERS;
 #define REGISTER_PATTERN(CLASS) REGISTER_PATTERN_(CLASS, __LINE__)
 
 std::vector<const byte*> FindPatternSimple(const byte* data, size_t length, const byte* pattern, const char* masks);
+
+std::string MakeCompactHexPattern(const byte* pattern, const char* mask);
+std::string MakeSpacedHexPattern(const byte* pattern, const char* mask, bool single_wildcard_token);

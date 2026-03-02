@@ -54,6 +54,7 @@ add_executable(${PROJECT_NAME}
     patterns/std_regex.cpp
     patterns/pattern16.cpp
     patterns/legacy_extras.cpp
+    patterns/qis.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
