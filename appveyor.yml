@@ -22,7 +22,7 @@ before_build:
 build_script:
   - cmd: mkdir build
   - cmd: cd build
-  - cmd: cmake .. -G "%CMAKE_GENERATOR%" -A "%CMAKE_PLATFORM" -DCMAKE_BUILD_TYPE=Release
+  - cmd: cmake .. -G "%CMAKE_GENERATOR%" -A "%CMAKE_PLATFORM%" -DCMAKE_BUILD_TYPE=Release
   - cmd: cmake --build . --config Release
   - cmd: ./out/Release/bin/pattern-bench.exe --size=0x800000 --tests=512 --full
 

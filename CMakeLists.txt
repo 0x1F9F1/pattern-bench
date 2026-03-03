@@ -29,7 +29,7 @@ elseif(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i[3-7]86")
     add_compile_definitions(MEM_SIMD_AVX2 MEM_SIMD_AVX MEM_SIMD_SSSE3 MEM_SIMD_SSE3 MEM_SIMD_SSE2 MEM_SIMD_SSE)
     include_directories(BEFORE SYSTEM compat/simde-shim vendor/simde)
 else()
-    add_compile_options(-mavx2)
+    add_compile_options(-mavx2 -mbmi)
 endif()
 
 add_executable(${PROJECT_NAME}
