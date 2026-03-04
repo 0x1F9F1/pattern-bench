@@ -63,7 +63,8 @@ set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT $
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
-    vendor/pattern16/include)
+    vendor/pattern16/include
+    vendor/qis)
 
 target_link_libraries(${PROJECT_NAME}
     mem fmt)
