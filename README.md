@@ -20,13 +20,13 @@ Use `--loglevel 1` for progress reporting.
 Random synthetic data (default behavior):
 
 ```powershell
-bin\Release\pattern-bench.exe --suite single --data_mode random --tests 64 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite single --data_mode random --tests 64 --full true --loglevel 1
 ```
 
 Single realistic corpus in single mode:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite single --data_mode synthetic_realistic --corpus mixed --tests 64 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite single --data_mode synthetic_realistic --corpus mixed --tests 64 --full true --loglevel 1
 ```
 
 ### 2) Realistic Suite
@@ -36,13 +36,13 @@ Runs synthetic realistic corpora and prints per-corpus results + aggregate leade
 All corpora:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite realistic --corpus all --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite realistic --corpus all --tests 8 --full true --loglevel 1
 ```
 
 One corpus only:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite realistic --corpus code --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite realistic --corpus code --tests 8 --full true --loglevel 1
 ```
 
 Available corpora:
@@ -58,7 +58,7 @@ Available corpora:
 Runs all pathological/degen stress cases and prints aggregate leaderboard:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite pathological --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite pathological --tests 8 --full true --loglevel 1
 ```
 
 ### 4) Combined Suite
@@ -69,7 +69,7 @@ Runs everything in one pass:
 - pathological suite (all cases)
 
 ```powershell
-bin\Release\pattern-bench.exe --suite combined --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite combined --tests 8 --full true --loglevel 1
 ```
 
 ## Useful Options
@@ -77,25 +77,25 @@ bin\Release\pattern-bench.exe --suite combined --tests 8 --full true --loglevel 
 Filter to one scanner:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite combined --filter "x64dbg" --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite combined --filter "x64dbg" --tests 8 --full true --loglevel 1
 ```
 
 Lock seed for reproducibility:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite realistic --corpus all --seed 0x88BEA0B2 --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite realistic --corpus all --seed 0x88BEA0B2 --tests 8 --full true --loglevel 1
 ```
 
 Run only one generated test index:
 
 ```powershell
-bin\Release\pattern-bench.exe --suite single --test 0 --tests 1 --full true --loglevel 4
+out\Release\bin\pattern-bench.exe --suite single --test 0 --tests 1 --full true --loglevel 4
 ```
 
 Change region size (bytes):
 
 ```powershell
-bin\Release\pattern-bench.exe --suite realistic --corpus all --size 33554432 --tests 8 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite realistic --corpus all --size 33554432 --tests 8 --full true --loglevel 1
 ```
 
 ## Smoke Tests
@@ -103,13 +103,13 @@ bin\Release\pattern-bench.exe --suite realistic --corpus all --size 33554432 --t
 Smoke-only check:
 
 ```powershell
-bin\Release\pattern-bench.exe --smoke_only true
+out\Release\bin\pattern-bench.exe --smoke_only true
 ```
 
 Skip smoke checks:
 
 ```powershell
-bin\Release\pattern-bench.exe --skip_smoke
+out\Release\bin\pattern-bench.exe --skip_smoke
 ```
 
 ## File Benchmark
@@ -117,7 +117,7 @@ bin\Release\pattern-bench.exe --skip_smoke
 Benchmark against a real binary file (`--file` supports `--suite single` only):
 
 ```powershell
-bin\Release\pattern-bench.exe --suite single --file "C:\path\to\binary.exe" --tests 64 --full true --loglevel 1
+out\Release\bin\pattern-bench.exe --suite single --file "C:\path\to\binary.exe" --tests 64 --full true --loglevel 1
 ```
 
 ## Failure Logs

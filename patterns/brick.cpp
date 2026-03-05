@@ -78,3 +78,75 @@ struct mem_simd_pattern_scanner : pattern_scanner
 };
 
 REGISTER_PATTERN(mem_simd_pattern_scanner);
+
+struct dynamic_freq_scanner : pattern_scanner
+{
+    struct scan_byte
+    {
+        std::uint8_t value;
+        std::uint32_t offset;
+    };
+
+    virtual std::vector<const byte*> Scan(
+        const byte* bytes, const char* mask, const byte* data, size_t length) const override
+    {
+        const std::size_t pattern_length = std::strlen(mask);
+
+        if (length < pattern_length)
+            return {};
+
+        std::vector<scan_byte> needles;
+
+        for (std::size_t i = pattern_length; i--;)
+        {
+            if (mask[i] == 'x')
+                needles.push_back({bytes[i], static_cast<std::uint32_t>(i)});
+        }
+
+        if (needles.empty())
+            return {};
+
+        const byte* const end = &data[length - (pattern_length - 1)];
+        scan_byte* p_needles = needles.data();
+        const std::size_t n_needles = needles.size();
+
+        std::vector<const byte*> results;
+
+        while (true)
+        {
+            scan_byte needle = p_needles[0];
+            data = std::find(data + needle.offset, end + needle.offset, needle.value) - needle.offset;
+            if (data == end)
+                break;
+
+            for (std::size_t i = 1;;)
+            {
+                if (i == n_needles)
+                {
+                    results.push_back(data);
+                    break;
+                }
+
+                needle = p_needles[i++];
+
+                if (data[needle.offset] == needle.value)
+                    continue;
+
+                p_needles[i - 1] = p_needles[i - 2];
+                p_needles[i - 2] = needle;
+                break;
+            }
+
+            ++data;
+        }
+
+        return results;
+    }
+
+    virtual const char* GetName() const override
+    {
+        return "dynamic_freq_scanner";
+    }
+};
+
+REGISTER_PATTERN(dynamic_freq_scanner);
