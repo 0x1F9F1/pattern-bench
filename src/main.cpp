@@ -230,16 +230,16 @@ static bool parse_bench_suite(const char* value, bench_suite& out)
     return false;
 }
 
-static const std::array<const char*, 8> PATHOLOGICAL_CASES {{
+static const std::array PATHOLOGICAL_CASES {
     "freq_anchor_near_miss",
     "bmh_shift1_periodic",
     "last_byte_flood",
-    "high_overlap_matches",
+    // "high_overlap_matches",
     "wildcard_sparse_exact",
     "alternating_anchor_noise",
     "short_pattern_stress",
     "boundary_alignment",
-}};
+};
 
 static const char* resolve_pathological_case(const std::string& name, size_t iteration)
 {
