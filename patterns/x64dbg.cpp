@@ -12,59 +12,92 @@ struct PatternByte
     // Nibble-aware mask/value encoding:
     // ((byte ^ value) & mask) == 0 means match.
     // mask bit = 1 enforces compare, 0 ignores wildcard nibble.
-    unsigned char value = 0;
+    unsigned char data = 0;
     unsigned char mask = 0;
 };
 
-static inline bool patternmatchbyte(unsigned char byte, const PatternByte& pbyte)
+struct PatternNeedle
 {
-    return (((byte ^ pbyte.value) & pbyte.mask) == 0);
-}
+    unsigned char data;
+    unsigned char mask;
+    size_t offset;
+};
 
 size_t patternfind(const unsigned char* data, size_t datasize, const std::vector<PatternByte>& pattern)
 {
-    const size_t searchpatternsize = pattern.size();
-    if (searchpatternsize == 0 || datasize < searchpatternsize)
-        return static_cast<size_t>(-1);
+    size_t searchpatternsize = pattern.size();
 
-    const PatternByte* pat = pattern.data();
-    const size_t last_start = datasize - searchpatternsize;
+    if (datasize < searchpatternsize)
+        return -1;
 
-    // Use the first fully-specified byte as a cheap prefilter.
-    size_t anchor = 0;
-    while (anchor < searchpatternsize && pat[anchor].mask != 0xFF)
-        ++anchor;
+    std::unique_ptr<PatternNeedle[]> const needles(new PatternNeedle[searchpatternsize]);
+    size_t n_needles = 0;
 
-    if (anchor == searchpatternsize)
+    // Collect all of the literal bytes.
+    // The less common bytes tend to be at the end, so iterate back-to-front.
+    for (size_t i = searchpatternsize; i--;)
     {
-        // All bytes are wildcard: first valid hit is the start.
-        return 0;
+        if (pattern[i].mask == 0xFF)
+            needles[n_needles++] = {pattern[i].data, pattern[i].mask, i};
     }
 
-    const unsigned char anchor_value = pat[anchor].value;
-    size_t pos = 0;
-    while (pos <= last_start)
+    size_t literals = n_needles;
+
+    // Don't forget the partially masked bytes.
+    for (size_t i = searchpatternsize; i--;)
     {
-        while (pos <= last_start && data[pos + anchor] != anchor_value)
-            ++pos;
+        if (pattern[i].mask != 0x00 && pattern[i].mask != 0xFF)
+            needles[n_needles++] = {pattern[i].data, pattern[i].mask, i};
+    }
 
-        if (pos > last_start)
-            break;
+    if (n_needles == 0)
+        return -1;
 
-        size_t i = 0;
-        for (; i < searchpatternsize; ++i)
+    const unsigned char* here = data;
+    const unsigned char* end = &data[datasize - (searchpatternsize - 1)];
+
+    do
+    {
+        if (literals)
         {
-            if (!patternmatchbyte(data[pos + i], pat[i]))
+            PatternNeedle needle = needles[0];
+
+            // On Windows, memchr is not as fast as it could be, so MSVC's std::find uses its own SIMD implementation.
+            here = std::find(here + needle.offset, end + needle.offset, needle.data) - needle.offset;
+            if (here == end)
                 break;
+
+            for (size_t i = 1; i < literals; ++i)
+            {
+                needle = needles[i];
+
+                if (here[needle.offset] != needle.data)
+                {
+                    // Swap this mismatched needle with the previously matched one.
+                    // By constantly re-adjusting the order of the needles, the least common one should be moved to the front,
+                    // maximizing the time spent inside std::find, and minimizing the time spent checking the rest of the bytes.
+                    needles[i] = needles[i - 1];
+                    needles[i - 1] = needle;
+                    goto skip;
+                }
+            }
         }
 
-        if (i == searchpatternsize)
-            return pos;
+        for (size_t i = literals; i < n_needles; ++i)
+        {
+            PatternNeedle needle = needles[i];
 
-        ++pos;
-    }
+            if ((here[needle.offset] & needle.mask) != needle.data)
+                goto skip;
+        }
 
-    return static_cast<size_t>(-1);
+        return here - data;
+
+    skip:
+        ++here;
+    } while (here != end);
+
+    return -1;
 }
 
 static std::vector<PatternByte> to_pattern_bytes(const byte* pattern, const char* mask)
@@ -76,12 +109,12 @@ static std::vector<PatternByte> to_pattern_bytes(const byte* pattern, const char
     {
         if (mask[i] == '?')
         {
-            out[i].value = 0;
+            out[i].data = 0;
             out[i].mask = 0x00;
         }
         else
         {
-            out[i].value = pattern[i];
+            out[i].data = pattern[i];
             out[i].mask = 0xFF;
         }
     }
