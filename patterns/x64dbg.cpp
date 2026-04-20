@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <vector>
+#include <algorithm>
 
 namespace x64dbg_impl
 {
