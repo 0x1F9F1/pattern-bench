@@ -55,6 +55,7 @@ add_executable(${PROJECT_NAME}
     patterns/pattern16.cpp
     patterns/legacy_extras.cpp
     patterns/qis.cpp
+    patterns/polymeric.cpp
 )
 
 add_subdirectory(vendor EXCLUDE_FROM_ALL)
